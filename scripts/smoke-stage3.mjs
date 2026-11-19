@@ -90,6 +90,27 @@ await a.goto(`${base}/trips/${tripId}/q/11`, { waitUntil: "networkidle" });
 await shot(a, "F4-q11");
 ok("F4：宿泊ありなので、問いは12問", (await a.locator(".accent-text").innerText()).replace(/\s/g, "") === "11/12");
 await a.goto(`${base}/trips/${tripId}/q/12`, { waitUntil: "networkidle" });
+// 問12：自由入力（サイトにない場所）
+await a.getByLabel("場所を検索").fill("熊野古道");
+ok("F4：問12は、候補がなくても「『熊野古道』をそのまま追加」が出る", await a.getByText("『熊野古道』をそのまま追加").isVisible());
+await a.getByText("『熊野古道』をそのまま追加").click();
+await a.waitForTimeout(400);
+ok("F4：自由入力は {text} で保存され、行に「サイトにない場所」が添う", JSON.stringify(db.answers.find((x) => x.member_id === memberA && x.question_id === "places")?.value) === '[{"text":"熊野古道"}]' && (await a.locator(".added-place").innerText()).includes("サイトにない場所"));
+await a.getByLabel("場所を検索").fill("銀山");
+await a.locator(".check-row").first().click();
+await a.waitForTimeout(300);
+ok("F4：候補から選んだ場所は、spot の id で入り、行には地域が添う", db.answers.find((x) => x.member_id === memberA && x.question_id === "places").value.includes("yamagata-ginzan-yukimi-buro") && (await a.locator(".added-place").nth(1).innerText()).includes("山形・銀山温泉"));
+await shot(a, "F4-q12-free");
+for (const t of ["あ場所", "い場所", "う場所", "え場所"]) { await a.getByLabel("場所を検索").fill(t); await a.getByText(`『${t}』をそのまま追加`).click(); }
+await a.getByLabel("場所を検索").fill("お場所");
+ok("F4：そのまま追加は5件まで（6件目は押せない）", await a.getByRole("button", { name: /『お場所』をそのまま追加/ }).isDisabled());
+await a.getByLabel("場所を検索").fill("");
+await a.getByRole("button", { name: "え場所を削除" }).click();
+await a.getByRole("button", { name: "熊野古道を削除" }).click();
+await a.waitForTimeout(300);
+ok("F4：削除できる（保存も更新される）", !JSON.stringify(db.answers.find((x) => x.member_id === memberA && x.question_id === "places").value).includes("熊野古道"));
+await a.getByLabel("場所を検索").fill("熊野古道"); await a.getByText("『熊野古道』をそのまま追加").click();
+ok("F4：入力は30字まで", (await a.getByLabel("場所を検索").getAttribute("maxlength")) === "30");
 await a.getByRole("button", { name: "次へ", exact: true }).click();
 await a.waitForURL(/\/intro/);
 ok("F4：最後の問いで answered_at が入る", Boolean(db.members.find((m) => m.id === memberA).answered_at));
@@ -192,6 +213,29 @@ ok("M2：行った場所を visits に記録できる", db.visits.length === 1);
 await b.goto(`${base}/trips`, { waitUntil: "networkidle" });
 await b.waitForSelector(".trip-card");
 ok("M2：自分が回答し終えていなければ「あなたの回答待ち」と続きの画面", (await b.locator(".status-chip").first().innerText()) === "決定" || (await b.locator(".trip-card a").first().getAttribute("href")).endsWith("/q/1"));
+
+// M3：サイトにない場所（spot_id なしの予定）
+db.plan_items.push({ id: randomUUID(), trip_id: tripId, day: 2, position: 20, spot_id: null, title: "熊野古道", time_hint: "13:00", pinned: false, edited_by_user: true, source: "user" });
+await a.goto(`${base}/trips/${tripId}/plan`, { waitUntil: "networkidle" });
+await a.waitForSelector(".plan-item");
+const freeCard = a.locator(".plan-item", { hasText: "熊野古道" });
+ok("M3：サイトにない場所は、みんなの丸なしで「サイトにない場所」と添う", (await freeCard.innerText()).includes("サイトにない場所") && (await freeCard.locator(".responses").count()) === 0 && (await freeCard.locator(".dot").count()) === 0);
+await shot(a, "M3-plan-free");
+await freeCard.locator(".main").click();
+ok("M3：詳細は、地図で見る（入力した文字で検索）と「このサイトにはありません。」だけ", (await a.getByText("この場所の情報は、このサイトにはありません。").isVisible()) && (await a.getByRole("link", { name: "地図で見る" }).getAttribute("href")) === "https://www.google.com/maps/search/?api=1&query=%E7%86%8A%E9%87%8E%E5%8F%A4%E9%81%93" && (await a.locator(".sheet dl").count()) === 0 && (await a.getByText("場所の詳細").count()) === 0);
+await a.keyboard.press("Escape");
+await freeCard.locator(".more").click();
+await a.getByRole("button", { name: "別の日に移す" }).click();
+await a.getByRole("button", { name: /日目の最後に移す/ }).click();
+await a.waitForTimeout(500);
+ok("M3：サイトにない場所も、日の移動ができる（編集済みのまま）", db.plan_items.find((p) => p.title === "熊野古道").day === 1 && db.plan_items.find((p) => p.title === "熊野古道").edited_by_user === true);
+await a.locator(".plan-item", { hasText: "熊野古道" }).locator(".more").click();
+await a.getByRole("button", { name: "この予定を外す" }).click();
+await a.waitForTimeout(500);
+ok("M3：外すと、その文字が removed_free_places に記録される", !db.plan_items.some((p) => p.title === "熊野古道") && db.removed_free_places.length === 1 && db.removed_free_places[0].place_text === "熊野古道");
+await a.getByRole("button", { name: "元に戻す" }).click();
+await a.waitForTimeout(500);
+ok("M3：元に戻すと戻り、記録も消える", db.plan_items.some((p) => p.title === "熊野古道") && db.removed_free_places.length === 0);
 
 // ひとり旅：名前の欄が消え、招待を飛ばして質問へ
 const c = await newPage(randomUUID());

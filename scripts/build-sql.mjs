@@ -49,6 +49,15 @@ writeFileSync(join(root, "supabase/setup.sql"), setup);
 
 // すでに前の段階の SQL を流しているとき用：新しい migration だけを1本にまとめる（段階3＝2番目のファイル）
 const stage3 = migrations.find((f) => f.includes("stage3"));
+const freePlaces = migrations.find((f) => f.includes("free_places"));
+if (freePlaces) {
+  writeFileSync(
+    join(root, "supabase/apply-free-places.sql"),
+    `-- 自動生成：scripts/build-sql.mjs。段階3までの SQL をすでに流しているときに、SQL Editor へ貼って Run する1本（初回だけ）。\n` +
+      `-- 初めて Supabase を使うときは、これではなく setup.sql を貼る（setup.sql にはこの内容も入っている）。\n\n` +
+      readFileSync(join(migrationDir, freePlaces), "utf8"),
+  );
+}
 if (stage3) {
   writeFileSync(
     join(root, "supabase/apply-stage3.sql"),

@@ -1,6 +1,6 @@
 "use client";
 
-import { MapPin, Search } from "lucide-react";
+import { MapPin, Plus, Search } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { Header, ProgressBar } from "@/components/layout/Header";
@@ -8,6 +8,8 @@ import { PrivacyNote } from "@/components/ui/badges";
 import { BottomBar, PrimaryButton } from "@/components/ui/buttons";
 import { CheckRow, ScaleButtons } from "@/components/ui/choices";
 import { questionHint, visibleQuestions } from "@/lib/domain/questions";
+import { isFreeText, MAX_FREE_TEXT_LEN, MAX_FREE_TEXTS, normalizePlaceText } from "@/lib/domain/places";
+import { prefectureShort } from "@/lib/domain/spot";
 import { tripSummary } from "@/lib/domain/trip-label";
 import { useQuestions } from "../QuestionsProvider";
 
@@ -47,10 +49,6 @@ export function Question({ tripId, step }: { tripId: string; step: number }) {
   };
 
   const toggle = (opt: string) => set(question.id, multi.includes(opt) ? multi.filter((o) => o !== opt) : [...multi, opt]);
-
-  const results = search.trim()
-    ? spots.filter((s) => !multi.includes(s.id) && [s.name, s.area, s.prefecture].some((t) => t.includes(search.trim())))
-    : [];
 
   return (
     <>
@@ -92,50 +90,94 @@ export function Question({ tripId, step }: { tripId: string; step: number }) {
           </div>
         )}
 
-        {question.kind === "places" && (
-          <div className="stack" style={{ marginTop: 24 }}>
-            <label className="text-input" style={{ display: "flex", alignItems: "center", gap: 10 }}>
-              <Search size={18} strokeWidth={2} aria-hidden="true" />
-              <input
-                style={{ flex: 1, minWidth: 0, minHeight: 44, background: "transparent", outline: 0 }}
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
-                placeholder="銀山温泉、蔵王など"
-                aria-label="場所を検索"
-              />
-            </label>
-            {results.map((s) => (
-              <button
-                key={s.id}
-                type="button"
-                className="check-row"
-                aria-pressed={false}
-                onClick={() => {
-                  set(question.id, [...multi, s.id]);
-                  setSearch("");
-                }}
-              >
-                <MapPin size={18} strokeWidth={2} aria-hidden="true" />
-                <span>
-                  {s.name}
-                  <span className="sub"> ・ {s.prefecture}{s.area}</span>
-                </span>
-              </button>
-            ))}
-            {multi.map((id) => {
-              const s = spots.find((x) => x.id === id);
-              return (
-                <div className="added-place" key={id}>
+        {question.kind === "places" && (() => {
+          const freeCount = multi.filter(isFreeText).length;
+          const text = search.trim();
+          const dup = multi.some((e) => isFreeText(e) && normalizePlaceText(e.text) === normalizePlaceText(text));
+          const canAddFree = text.length > 0 && normalizePlaceText(text).length > 0 && !dup && freeCount < MAX_FREE_TEXTS;
+          const results = text ? spots.filter((s) => !multi.includes(s.id) && [s.name, s.area, s.prefecture].some((t) => t.includes(text))) : [];
+          return (
+            <div className="stack" style={{ marginTop: 24 }}>
+              <label className="text-input" style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                <Search size={18} strokeWidth={2} aria-hidden="true" />
+                <input
+                  style={{ flex: 1, minWidth: 0, minHeight: 44, background: "transparent", outline: 0 }}
+                  value={search}
+                  maxLength={MAX_FREE_TEXT_LEN}
+                  onChange={(e) => setSearch(e.target.value)}
+                  placeholder="銀山温泉、蔵王など"
+                  aria-label="場所を検索"
+                />
+              </label>
+              {results.map((s) => (
+                <button
+                  key={s.id}
+                  type="button"
+                  className="check-row"
+                  aria-pressed={false}
+                  onClick={() => {
+                    set(question.id, [...multi, s.id]);
+                    setSearch("");
+                  }}
+                >
                   <MapPin size={18} strokeWidth={2} aria-hidden="true" />
-                  <span>{s?.name ?? id}</span>
-                  <button type="button" className="header-text-btn" onClick={() => set(question.id, multi.filter((x) => x !== id))}>
-                    削除
-                  </button>
-                </div>
-              );
-            })}
-          </div>
-        )}
+                  <span>
+                    {s.name}
+                    <span className="sub"> ・ {prefectureShort(s.prefecture)}・{s.area}</span>
+                  </span>
+                </button>
+              ))}
+              {/* 候補にない場所も、入力した文字のまま追加できる（30字まで、5件まで） */}
+              {text && (
+                <button
+                  type="button"
+                  className="check-row"
+                  disabled={!canAddFree}
+                  onClick={() => {
+                    set(question.id, [...multi, { text }]);
+                    setSearch("");
+                  }}
+                >
+                  <Plus size={18} strokeWidth={2} aria-hidden="true" />
+                  <span>『{text}』をそのまま追加</span>
+                </button>
+              )}
+              {text && freeCount >= MAX_FREE_TEXTS && (
+                // TODO(spec): 5件に達したときの文言は仕様書にない（仮の文言）。
+                <p className="sub" role="status">そのまま追加できるのは、5件までです。</p>
+              )}
+              {multi.map((e) => {
+                if (isFreeText(e)) {
+                  return (
+                    <div className="added-place" key={`t:${e.text}`}>
+                      <MapPin size={18} strokeWidth={2} aria-hidden="true" />
+                      <span>
+                        {e.text}
+                        <span className="sub min" style={{ display: "block" }}>サイトにない場所</span>
+                      </span>
+                      <button type="button" className="header-text-btn" aria-label={`${e.text}を削除`} onClick={() => set(question.id, multi.filter((x) => x !== e))}>
+                        削除
+                      </button>
+                    </div>
+                  );
+                }
+                const s = spots.find((x) => x.id === e);
+                return (
+                  <div className="added-place" key={e}>
+                    <MapPin size={18} strokeWidth={2} aria-hidden="true" />
+                    <span>
+                      {s?.name ?? e}
+                      {s && <span className="sub min" style={{ display: "block" }}>{prefectureShort(s.prefecture)}・{s.area}</span>}
+                    </span>
+                    <button type="button" className="header-text-btn" aria-label={`${s?.name ?? e}を削除`} onClick={() => set(question.id, multi.filter((x) => x !== e))}>
+                      削除
+                    </button>
+                  </div>
+                );
+              })}
+            </div>
+          );
+        })()}
 
         <PrivacyNote />
       </main>

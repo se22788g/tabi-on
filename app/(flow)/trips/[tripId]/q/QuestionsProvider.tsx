@@ -8,7 +8,8 @@ import { useSupabase } from "@/lib/db/use-supabase";
 import type { Spot } from "@/lib/domain/spot";
 import { useRouter } from "next/navigation";
 
-export type AnswerValue = string[] | number | null;
+/** 複数選択は選択肢の文字列、5段階は数、「行きたい場所」は spot の id か、自由入力の {text} */
+export type AnswerValue = (string | { text: string })[] | number | null;
 type Ctx = {
   trip: TripInfo;
   memberCount: number;

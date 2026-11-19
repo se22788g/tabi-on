@@ -3,6 +3,7 @@
 // エリアごとに上位2〜3件をまとめる。タイトルは「{エリア}で、{tag1}と{tag2}」。
 import type { Aggregate } from "@/lib/domain/answers";
 import type { CandidateOut } from "@/lib/domain/candidate-rules";
+import { areaOf, matchFreeText } from "@/lib/domain/places";
 import { areaLabelOf, type Spot } from "@/lib/domain/spot";
 import { areaKeyOf } from "@/lib/domain/travel";
 
@@ -79,6 +80,10 @@ export type CandidateRuleInput = {
   mine: Record<string, string[]>;
   /** 必ず1件に入れる場所（seed_spot_id と、「行きたい場所」で追加された場所）。先頭が一番優先 */
   forced: Spot[];
+  /** 「行きたい場所」に自由入力された文字（サイトにない場所）。spots と部分一致で照らし、近いエリアを当てる */
+  freeTexts?: string[];
+  /** 自由入力の照合に使う、全部の spots（絞り込む前）。なければ spots */
+  allSpots?: Spot[];
   /** すでにあるおすすめの spot_ids */
   existing: string[][];
   count: number;
@@ -98,9 +103,34 @@ export function ruleCandidates(input: CandidateRuleInput): CandidateOut[] {
   const mine = picksOf(mineMulti);
   const vibeAvg = aggregate.scale.vibe?.avg ?? null;
 
+  // 自由入力の場所：name・area に一致した spot は「追加された spot」と同じ（必ず1件に入れる）。
+  // 都道府県・tags に一致、または都道府県名・主な地名で当てた地域は、そのエリアの点数を上げる。
+  const freeForced: Spot[] = [];
+  const areaBonus = new Map<string, number>();
+  const areaReason = new Map<string, string>();
+  const lookup = input.allSpots ?? input.spots;
+  for (const text of input.freeTexts ?? []) {
+    const m = matchFreeText(text, lookup);
+    for (const sp of m.strong) {
+      if (!freeForced.some((f) => f.id === sp.id)) freeForced.push(sp);
+      areaReason.set(areaOf(sp), areaReason.get(areaOf(sp)) ?? text);
+    }
+    for (const sp of m.weak) {
+      areaBonus.set(areaOf(sp), (areaBonus.get(areaOf(sp)) ?? 0) + 1);
+      areaReason.set(areaOf(sp), areaReason.get(areaOf(sp)) ?? text);
+    }
+    for (const sp of lookup) {
+      if (m.regions.includes(sp.region)) {
+        areaBonus.set(areaOf(sp), (areaBonus.get(areaOf(sp)) ?? 0) + 3);
+        areaReason.set(areaOf(sp), areaReason.get(areaOf(sp)) ?? text);
+      }
+    }
+  }
+  const forcedAll = [...input.forced, ...freeForced.filter((f) => !input.forced.some((x) => x.id === f.id))];
+
   const score = new Map<string, number>();
   const pool = new Map<string, Spot>();
-  for (const s of [...input.spots, ...input.forced]) pool.set(s.id, s);
+  for (const s of [...input.spots, ...forcedAll]) pool.set(s.id, s);
   for (const s of pool.values()) score.set(s.id, scoreSpot(s, all, mine, vibeAvg));
 
   // エリアごとにまとめる
@@ -109,17 +139,17 @@ export function ruleCandidates(input: CandidateRuleInput): CandidateOut[] {
     const k = areaKeyOf(s.id) ?? s.id;
     byArea.set(k, [...(byArea.get(k) ?? []), s]);
   }
-  const forcedIds = new Set(input.forced.map((s) => s.id));
+  const forcedIds = new Set(forcedAll.map((s) => s.id));
   const sortSpots = (list: Spot[]) =>
     [...list].sort((a, b) => Number(forcedIds.has(b.id)) - Number(forcedIds.has(a.id)) || score.get(b.id)! - score.get(a.id)! || a.id.localeCompare(b.id));
   const areas = [...byArea].map(([key, list]) => {
     const top = sortSpots(list).slice(0, 3);
-    return { key, top, total: top.reduce((n, s) => n + score.get(s.id)!, 0) };
+    return { key, top, total: top.reduce((n, s) => n + score.get(s.id)!, 0) + (areaBonus.get(key) ?? 0) };
   });
 
   // 必ず入れる場所のエリアを先に（seed → 追加された場所の順）、そのあと点数の高い順。すでにあるおすすめと同じエリアは後回し
   const usedAreas = new Set(input.existing.flat().map((id) => areaKeyOf(id) ?? id));
-  const forcedKeys = [...new Set(input.forced.map((s) => areaKeyOf(s.id) ?? s.id))];
+  const forcedKeys = [...new Set(forcedAll.map((s) => areaKeyOf(s.id) ?? s.id))];
   const rest = areas
     .filter((a) => !forcedKeys.includes(a.key))
     .sort((a, b) => Number(usedAreas.has(a.key)) - Number(usedAreas.has(b.key)) || b.total - a.total || a.key.localeCompare(b.key));
@@ -143,7 +173,11 @@ export function ruleCandidates(input: CandidateRuleInput): CandidateOut[] {
       area_label: label.slice(0, 14),
       spot_ids: spots.map((s) => s.id),
       tags: tags.length >= 2 ? tags : [...tags, ...spots[0].tags.filter((t) => !tags.includes(t))].slice(0, 2),
-      reason: (best ? `「${best.option}」を選んだ回答から` : "みんなの回答の傾向から").slice(0, 40),
+      // 自由入力に近いエリアのおすすめには、「『{入力した文字}』に近い場所として選びました」（40字以内に収める）
+      reason: (areaReason.has(area.key)
+        ? `『${areaReason.get(area.key)!.slice(0, 26)}』に近い場所として選びました`
+        : best ? `「${best.option}」を選んだ回答から` : "みんなの回答の傾向から"
+      ).slice(0, 40),
     });
   }
   return out;

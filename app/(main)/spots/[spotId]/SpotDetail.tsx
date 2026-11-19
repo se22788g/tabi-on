@@ -19,6 +19,9 @@ export function SpotDetail({ spotId }: { spotId: string }) {
   const my = useMyData();
   const [sent, setSent] = useState(false);
   const [busy, setBusy] = useState(false);
+  const [againBusy, setAgainBusy] = useState(false);
+  /** チップの下の文：失敗（error）か、選択を外した（cleared）。選んでいるときの文は、選択から出す */
+  const [note, setNote] = useState<"" | "error" | "cleared">("");
   const ready = my.status === "ready" ? my : null;
   const spot = ready?.data.spots.find((s) => s.id === spotId) ?? null;
   const visit = ready?.data.visits.find((v) => v.spotId === spotId) ?? null;
@@ -29,6 +32,7 @@ export function SpotDetail({ spotId }: { spotId: string }) {
   const toggleVisited = async () => {
     if (!ready || busy) return;
     setBusy(true);
+    setNote("");
     const { client, data, setVisits } = ready;
     if (visited) {
       await client.from("visits").delete().eq("user_id", data.userId).eq("spot_id", spotId);
@@ -39,11 +43,29 @@ export function SpotDetail({ spotId }: { spotId: string }) {
     }
     setBusy(false);
   };
-  /** 「また行きたい／一度でいい」 */
-  const setAgain = async (again: boolean) => {
-    if (!ready) return;
-    await ready.client.from("visits").update({ again }).eq("user_id", ready.data.userId).eq("spot_id", spotId);
-    ready.setVisits(ready.data.visits.map((v) => (v.spotId === spotId ? { ...v, again } : v)));
+  /**
+   * 「また行きたい／一度でいい」。選んだほうのチップを塗りつぶして✓を付け、チップの下に「『…』で記録しました」と出す。
+   * 保存できたときだけ変え、保存に失敗したら変えずに「記録できませんでした。もう一度ためしてください」を出す。
+   * 選び直すと上書きし、同じほうをもう一度押すと選択を外して「記録をはずしました」と出す。
+   */
+  const chooseAgain = async (value: boolean) => {
+    if (!ready || againBusy) return;
+    setAgainBusy(true);
+    setNote("");
+    const next = visit?.again === value ? null : value;
+    const { data, error } = await ready.client
+      .from("visits")
+      .update({ again: next })
+      .eq("user_id", ready.data.userId)
+      .eq("spot_id", spotId)
+      .select("spot_id");
+    if (error || !data || data.length !== 1) {
+      setNote("error");
+    } else {
+      ready.setVisits(ready.data.visits.map((v) => (v.spotId === spotId ? { ...v, again: next } : v)));
+      setNote(next === null ? "cleared" : "");
+    }
+    setAgainBusy(false);
   };
 
   if (my.status === "unconfigured" || my.status === "failed") return <SetupNotice status={my.status} />;
@@ -122,13 +144,25 @@ export function SpotDetail({ spotId }: { spotId: string }) {
             <div className="card" style={{ padding: 14 }}>
               <p style={{ fontWeight: 900, marginBottom: 8 }}>また行きたい？</p>
               <div className="chips">
-                <button type="button" className="chip" aria-pressed={again === true} onClick={() => void setAgain(true)}>
-                  また行きたい
-                </button>
-                <button type="button" className="chip" aria-pressed={again === false} onClick={() => void setAgain(false)}>
-                  一度でいい
-                </button>
+                {([[true, "また行きたい"], [false, "一度でいい"]] as const).map(([value, label]) => {
+                  const chosen = again === value;
+                  return (
+                    <button key={label} type="button" className={`chip ${chosen ? "chosen" : ""}`} aria-pressed={chosen} disabled={againBusy} onClick={() => void chooseAgain(value)}>
+                      {chosen && <Check size={14} strokeWidth={3} aria-hidden="true" />}
+                      {label}
+                    </button>
+                  );
+                })}
               </div>
+              <p className="sub" role="status" style={{ marginTop: 8, minHeight: 20, color: note === "error" ? "#b3261e" : undefined }}>
+                {note === "error"
+                  ? "記録できませんでした。もう一度ためしてください"
+                  : note === "cleared"
+                    ? "記録をはずしました"
+                    : again !== null
+                      ? `『${again ? "また行きたい" : "一度でいい"}』で記録しました`
+                      : ""}
+              </p>
             </div>
           )}
           <button type="button" className="secondary-btn" onClick={share}>

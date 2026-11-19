@@ -433,6 +433,12 @@ h3 {
   background: var(--chip-on);
   border-color: var(--chip-on-border);
 }
+/* 選んだ結果をその場で分かるように、塗りつぶす（M4「また行きたい／一度でいい」） */
+.chip.chosen {
+  color: #fff;
+  background: var(--accent);
+  border-color: var(--accent);
+}
 .chip.undecided {
   background: rgba(255, 255, 255, 0.42);
   border: 1px dashed rgba(104, 91, 126, 0.6);

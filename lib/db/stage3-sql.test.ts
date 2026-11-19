@@ -297,3 +297,68 @@ describe("言い出し役が人を足す（F2「＋ 人を追加」）", () => {
     expect(await as("authenticated", A, "select name from public.members order by seq desc limit 1")).toEqual([{ name: "ゆうこ" }]);
   });
 });
+
+// ---- 問12の自由入力（spot_id が null の予定）----
+describe("サイトにない場所（spot_id が null の予定）", () => {
+  let trip = "";
+  let mA = "";
+  let mB = "";
+  const U1 = "00000000-0000-0000-0000-0000000000a1";
+  const U2 = "00000000-0000-0000-0000-0000000000a2";
+  const free = (day: number, title: string) => ({ day, spot_id: null, title, time_hint: "13:00", source: "user" });
+  const spot = (day: number, id: string) => ({ day, spot_id: id, title: id, time_hint: "10:00", source: "rule" });
+
+  beforeAll(async () => {
+    await db.exec(`insert into auth.users values ('${U1}'), ('${U2}')`);
+    const r = (await one("authenticated", U1, `select public.create_trip('あや', 'friends', '{}', '1', null, '{}', null, '{みさき}') as r`)).r as { trip_id: string; member_id: string };
+    trip = r.trip_id;
+    mA = r.member_id;
+    mB = (await as("service_role", null, "select id from public.members where trip_id = $1 and not is_owner", [trip]))[0].id as string;
+    await as("service_role", null, "update public.members set user_id = $2 where id = $1", [mB, U2]);
+  });
+
+  it("save_plan は spot_id が null の予定を入れられる。source=user は edited_by_user になる", async () => {
+    await one("service_role", null, `select public.save_plan($1, '旅', 'rule', 'r', $2::jsonb, null)`, [
+      trip, JSON.stringify([spot(1, "yamagata-ginzan-yukimi-buro"), free(2, "熊野古道")]),
+    ]);
+    const rows = await as("service_role", null, "select spot_id, title, source, edited_by_user, day from public.plan_items where trip_id = $1 order by day", [trip]);
+    expect(rows.find((x) => x.title === "熊野古道")).toMatchObject({ spot_id: null, source: "user", edited_by_user: true, day: 2 });
+    expect(rows.find((x) => x.spot_id === "yamagata-ginzan-yukimi-buro")).toMatchObject({ edited_by_user: false });
+  });
+  it("作り直しても消えず、同じタイトルは増えない。手を入れていない予定は入れ替わる", async () => {
+    await one("service_role", null, `select public.save_plan($1, '旅', 'rule', 'r', $2::jsonb, null)`, [
+      trip, JSON.stringify([spot(1, "yamagata-zao-juhyo-snowshoe"), free(1, "熊野古道"), free(1, "しまなみ海道")]),
+    ]);
+    const rows = await as("service_role", null, "select spot_id, title from public.plan_items where trip_id = $1 order by day, position", [trip]);
+    expect(rows.filter((x) => x.title === "熊野古道")).toHaveLength(1);
+    expect(rows.find((x) => x.title === "熊野古道")).toBeDefined();
+    expect(rows.find((x) => x.title === "しまなみ海道")).toBeDefined();
+    expect(rows.find((x) => x.spot_id === "yamagata-ginzan-yukimi-buro")).toBeUndefined(); // 手を入れていない銀山は、新しい案になかったので消える
+  });
+  it("plan_view は、spot_id が null の予定でも壊れず、平均の丸と levels を付けない", async () => {
+    await as("authenticated", U1, "update public.members set rated_at = now() where id = $1", [mA]);
+    const pv = (await one("authenticated", U1, "select public.plan_view($1) as r", [trip])).r as { items: { title: string; spot_id: string | null; avg: number | null; levels: number[] }[] };
+    const it = pv.items.find((i) => i.title === "熊野古道")!;
+    expect(it).toMatchObject({ spot_id: null, avg: null, levels: [] });
+  });
+  it("メンバーは、spot_id が null の予定を並べ替え・日の移動・削除できる", async () => {
+    const id = (await one("authenticated", U2, "select id from public.plan_items where title = '熊野古道'")).id as string;
+    await as("authenticated", U2, `insert into public.plan_items (id, trip_id, day, position, spot_id, title, time_hint, edited_by_user, source)
+      values ($1, $2, 2, 9, null, '熊野古道', '13:00', true, 'user') on conflict (id) do update set day = excluded.day, position = excluded.position`, [id, trip]);
+    expect((await one("authenticated", U2, "select day, position from public.plan_items where id = $1", [id]))).toMatchObject({ day: 2, position: 9 });
+    expect(await as("authenticated", U2, "delete from public.plan_items where id = $1 returning id", [id])).toHaveLength(1);
+  });
+  it("外した記録（removed_free_places）：メンバーだけ。30字まで", async () => {
+    await as("authenticated", U2, "insert into public.removed_free_places (trip_id, place_text, removed_by) values ($1, '熊野古道', $2) on conflict do nothing", [trip, U2]);
+    expect(await as("authenticated", U1, "select * from public.removed_free_places")).toHaveLength(1);
+    expect(await as("authenticated", D, "select * from public.removed_free_places")).toHaveLength(0);
+    expect(await fails(as("authenticated", D, "insert into public.removed_free_places (trip_id, place_text) values ($1, 'x')", [trip]))).toBe(true);
+    expect(await fails(as("authenticated", U1, "insert into public.removed_free_places (trip_id, place_text) values ($1, $2)", [trip, "あ".repeat(31)]))).toBe(true);
+    await as("authenticated", U1, "delete from public.removed_free_places where trip_id = $1 and place_text = '熊野古道'", [trip]);
+    expect(await as("authenticated", U1, "select * from public.removed_free_places")).toHaveLength(0);
+  });
+  it("save_plan は、サーバー（service_role）だけが呼べるまま", async () => {
+    expect(await fails(as("authenticated", U1, `select public.save_plan($1, 't', 'rule', 'r', '[]'::jsonb, null)`, [trip]))).toBe(true);
+  });
+});
+const D = "00000000-0000-0000-0000-00000000000d";

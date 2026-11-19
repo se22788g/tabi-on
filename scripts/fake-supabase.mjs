@@ -11,7 +11,7 @@ const CORS = { "access-control-allow-origin": "*", "access-control-allow-headers
 
 export function createFakeDb() {
   const spots = JSON.parse(readFileSync("supabase/seed/spots.json", "utf8"));
-  return { spots, trips: [], members: [], answers: [], candidates: [], ratings: [], plan_items: [], plans: null, removed_spots: [], visits: [], profiles: [], log: [], seq: 0 };
+  return { spots, trips: [], members: [], answers: [], candidates: [], ratings: [], plan_items: [], plans: null, removed_spots: [], visits: [], profiles: [], removed_free_places: [], failVisitsPatch: false, log: [], seq: 0 };
 }
 
 const iso = () => new Date().toISOString();
@@ -39,7 +39,7 @@ export async function installFakeSupabase(context, db, { userId = randomUUID(), 
     const show = Boolean(me?.rated_at);
     const items = [...db.plan_items].sort((a, b) => a.day - b.day || a.position - b.position).map((i) => ({
       id: i.id, day: i.day, position: i.position, spot_id: i.spot_id, title: i.title, time_hint: i.time_hint, pinned: !!i.pinned,
-      edited_by_user: !!i.edited_by_user, source: i.source, avg: show ? 3.5 : null, levels: show ? [4, 3] : [],
+      edited_by_user: !!i.edited_by_user, source: i.source, avg: show && i.spot_id ? 3.5 : null, levels: show && i.spot_id ? [4, 3] : [],
     }));
     const candSpots = [...new Set(db.candidates.flatMap((c) => c.spot_ids))].map((id) => ({ spot_id: id, avg: show ? 3 : null }));
     return {
@@ -90,7 +90,7 @@ export async function installFakeSupabase(context, db, { userId = randomUUID(), 
     const prefer = req.headers()["prefer"] ?? "";
     const reply = (rows) => (wantsObject ? (rows[0] ? json(route, rows[0]) : json(route, { message: "no rows" }, 406)) : json(route, rows));
     if (path.startsWith("rpc/")) return json(route, rpc(path.slice(4), body ?? {}));
-    const tables = { spots: db.spots, trips: db.trips, members: db.members, answers: db.answers, candidates: db.candidates, ratings: db.ratings, plan_items: db.plan_items, removed_spots: db.removed_spots, visits: db.visits, profiles: db.profiles };
+    const tables = { spots: db.spots, trips: db.trips, members: db.members, answers: db.answers, candidates: db.candidates, ratings: db.ratings, plan_items: db.plan_items, removed_spots: db.removed_spots, visits: db.visits, profiles: db.profiles, removed_free_places: db.removed_free_places };
     if (!(path in tables)) return json(route, [], 200);
     const rows = tables[path];
     if (method === "GET" || method === "HEAD") {
@@ -104,7 +104,7 @@ export async function installFakeSupabase(context, db, { userId = randomUUID(), 
       const list = Array.isArray(body) ? body : [body];
       db.log.push(`POST ${path} ${list.length}`);
       for (const r of list) {
-        const key = { answers: ["member_id", "question_id"], ratings: ["member_id", "candidate_id"], profiles: ["id"], plan_items: ["id"], removed_spots: ["trip_id", "spot_id"], visits: ["user_id", "spot_id"] }[path];
+        const key = { answers: ["member_id", "question_id"], ratings: ["member_id", "candidate_id"], profiles: ["id"], plan_items: ["id"], removed_spots: ["trip_id", "spot_id"], removed_free_places: ["trip_id", "place_text"], visits: ["user_id", "spot_id"] }[path];
         const i = key ? rows.findIndex((x) => key.every((k) => x[k] === r[k])) : -1;
         if (i >= 0) { if (!prefer.includes("ignore-duplicates")) rows[i] = { ...rows[i], ...r }; }
         else rows.push({ created_at: iso(), ...(path === "members" ? { id: randomUUID(), seq: ++db.seq, user_id: null, is_owner: false, answered_at: null, rated_at: null } : {}), ...r });
@@ -112,6 +112,7 @@ export async function installFakeSupabase(context, db, { userId = randomUUID(), 
       return prefer.includes("return=representation") ? json(route, list, 201) : empty(route, 201);
     }
     if (method === "PATCH") {
+      if (path === "visits" && db.failVisitsPatch) return json(route, { message: "boom" }, 500);
       const hit = filter(rows, url.searchParams);
       db.log.push(`PATCH ${path} ${hit.length}`);
       hit.forEach((r) => Object.assign(r, body));

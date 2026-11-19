@@ -6,7 +6,8 @@ import { createCandidates } from "@/lib/ai/candidates";
 import { createPlan } from "@/lib/ai/plan";
 import { aggregateAnswers, answersOf, type AnswerRow } from "@/lib/domain/answers";
 import { candidateCountToAdd, filterSpots, MAX_CANDIDATES_PER_TRIP } from "@/lib/domain/candidate-rules";
-import { daysFor } from "@/lib/domain/plan-rules";
+import { normalizePlaceText } from "@/lib/domain/places";
+import { daysFor, placeFreeTexts } from "@/lib/domain/plan-rules";
 import type { Nights } from "@/lib/domain/questions";
 import type { CandidateStat } from "@/lib/domain/ratings";
 import { spotFromRow, type Spot } from "@/lib/domain/spot";
@@ -67,14 +68,15 @@ export async function generateCandidatesAction(tripId: string): Promise<Candidat
     const pool = filterSpots(spots, { regions: trip.regions ?? [], months: trip.months ?? [], nights: trip.nights as Nights, originCity });
     const byId = new Map(spots.map((s) => [s.id, s]));
     // 必ず1件に入れる：seed の場所、いま答えた人が追加した場所、ほかの人が追加した場所
-    const placeIds = [...(Array.isArray(mineAll.places) ? (mineAll.places as string[]) : []), ...aggregate.places];
+    const mineIds = Array.isArray(mineAll.places) ? (mineAll.places as unknown[]).filter((e): e is string => typeof e === "string") : [];
+    const placeIds = [...mineIds, ...aggregate.places];
     const forced = [...new Set([trip.seed_spot_id, ...placeIds].filter((id): id is string => Boolean(id)))]
       .map((id) => byId.get(id))
       .filter((s): s is Spot => Boolean(s))
       // seed は、新しい旅の最初のおすすめに入れる。すでにあるおすすめに入っている場所は、入れ直さない
       .filter((s) => !list.some((c) => (c.spot_ids as string[]).includes(s.id)));
 
-    const result = await createCandidates({ spots: pool, aggregate, mine, forced, existing: list.map((c) => c.spot_ids as string[]), count });
+    const result = await createCandidates({ spots: pool, aggregate, mine, forced, existing: list.map((c) => c.spot_ids as string[]), count, freeTexts: aggregate.freeTexts, allSpots: spots });
     if (result.candidates.length === 0) return { ok: true, source: result.source, created: 0 };
     const { error } = await service.from("candidates").insert(
       result.candidates.map((c) => ({
@@ -122,10 +124,10 @@ export async function generatePlanAction(tripId: string): Promise<{ ok: boolean 
 
     const { data: members } = await service.from("members").select("id, rated_at").eq("trip_id", tripId);
     const ratedCount = (members ?? []).filter((m) => m.rated_at !== null).length;
-    const { data: ansRows } = await service.from("answers").select("member_id, question_id, value").in("question_id", ["pace", "style"]).in("member_id", (members ?? []).map((m) => m.id));
+    const { data: ansRows } = await service.from("answers").select("member_id, question_id, value").in("question_id", ["pace", "style", "places"]).in("member_id", (members ?? []).filter((m) => m.rated_at !== null || m.id === memberId).map((m) => m.id));
     const agg = aggregateAnswers((ansRows ?? []).map((r) => ({ memberId: r.member_id, questionId: r.question_id, value: r.value })));
 
-    const { data: keptRows } = await service.from("plan_items").select("spot_id, day, pinned, edited_by_user").eq("trip_id", tripId);
+    const { data: keptRows } = await service.from("plan_items").select("spot_id, day, title, pinned, edited_by_user").eq("trip_id", tripId);
     const keptAll = (keptRows ?? []).filter((r) => r.pinned || r.edited_by_user);
     const kept = keptAll.filter((r) => r.spot_id).map((r) => ({ spotId: r.spot_id as string, day: r.day as number }));
     const pinnedSpotIds = keptAll.filter((r) => r.pinned && r.spot_id).map((r) => r.spot_id as string);
@@ -143,7 +145,23 @@ export async function generatePlanAction(tripId: string): Promise<{ ok: boolean 
       pinnedSpotIds,
       removedSpotIds: (removedRows ?? []).map((r) => r.spot_id),
     });
-    const items = result.plan.days.flatMap((d) => d.items.map((i) => ({ day: d.day, spot_id: i.spot_id, title: i.title, time_hint: i.time_hint, source: result.source })));
+    const items: { day: number; spot_id: string | null; title: string; time_hint: string; source: string }[] = result.plan.days.flatMap((d) =>
+      d.items.map((i) => ({ day: d.day, spot_id: i.spot_id as string | null, title: i.title, time_hint: i.time_hint, source: result.source })),
+    );
+
+    // 自由入力された「サイトにない場所」：いちばん予定の少ない日の最後に、「あなたが入れた場所」の予定（spot_id なし、source=user）として入れる。
+    // 作り直しでも消さない（DB 側で edited_by_user と同じに扱う）。外した文字は、戻さない。
+    const days = daysFor(trip.nights as Nights);
+    const dayCounts = Array.from({ length: days }, (_, i) => keptAll.filter((r) => r.day === i + 1).length + items.filter((x) => x.day === i + 1).length);
+    const { data: removedTextRows } = await service.from("removed_free_places").select("place_text").eq("trip_id", tripId);
+    const freeItems = placeFreeTexts({
+      texts: agg.freeTexts,
+      dayCounts,
+      existingTitles: (keptRows ?? []).filter((r) => !r.spot_id).map((r) => r.title as string),
+      removedTexts: (removedTextRows ?? []).map((r) => r.place_text as string),
+      normalize: normalizePlaceText,
+    });
+    for (const f of freeItems) items.push({ day: f.day, spot_id: null, title: f.title, time_hint: f.time_hint, source: "user" });
     const { error } = await service.rpc("save_plan", {
       p_trip_id: tripId,
       p_title: result.plan.title,

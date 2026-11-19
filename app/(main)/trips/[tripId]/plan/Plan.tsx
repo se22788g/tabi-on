@@ -105,7 +105,7 @@ function PlanCard({
       </button>
       <button type="button" className="main" onClick={onOpen}>
         <span className="heat" aria-hidden="true">
-          {item.avg !== null && <LevelDot level={item.avg} size={9} />}
+          {item.spotId !== null && item.avg !== null && <LevelDot level={item.avg} size={9} />}
         </span>
         {item.pinned && (
           <span className="pin-label">
@@ -115,7 +115,7 @@ function PlanCard({
         )}
         <b>{item.title}</b>
         <span className="sub min">{item.timeHint ? `${hhmm(item.timeHint)}ごろ・` : ""}{spotName}</span>
-        {!solo && item.levels.length > 0 && (
+        {!solo && item.spotId !== null && item.levels.length > 0 && (
           <span className="responses" aria-label="みんなの行きたい度合い">
             <span>みんな</span>
             {item.levels.map((l, i) => (
@@ -258,6 +258,13 @@ export function Plan({ tripId }: { tripId: string }) {
   const save = (list: PlanItem[]) => run(() => client.from("plan_items").upsert(list.map(row), { onConflict: "id" }));
   const markRemoved = (spotId: string) => client.from("removed_spots").upsert({ trip_id: tripId, spot_id: spotId, removed_by: userId }, { onConflict: "trip_id,spot_id", ignoreDuplicates: true });
   const unmarkRemoved = (spotId: string) => client.from("removed_spots").delete().eq("trip_id", tripId).eq("spot_id", spotId);
+  /** サイトにない場所（spot_id なし）は、入力した文字で「外した場所」を記録する（作り直しで戻さない） */
+  const markItemRemoved = (it: PlanItem) =>
+    it.spotId
+      ? markRemoved(it.spotId)
+      : client.from("removed_free_places").upsert({ trip_id: tripId, place_text: it.title.slice(0, 30), removed_by: userId }, { onConflict: "trip_id,place_text", ignoreDuplicates: true });
+  const unmarkItemRemoved = (it: PlanItem) =>
+    it.spotId ? unmarkRemoved(it.spotId) : client.from("removed_free_places").delete().eq("trip_id", tripId).eq("place_text", it.title.slice(0, 30));
 
   /** その日の順番を差し替え、時刻の目安を早い順に振り直す（編集済みの印を付ける） */
   const reorderDay = (d: number, list: PlanItem[]): PlanItem[] => {
@@ -310,7 +317,7 @@ export function Plan({ tripId }: { tripId: string }) {
     // 外した場所は、その旅の「外した場所」として記録する（作り直しで勝手に戻さない）
     void run(async () => {
       await client.from("plan_items").delete().eq("id", id);
-      if (it.spotId) await markRemoved(it.spotId);
+      await markItemRemoved(it);
     });
   };
 
@@ -322,7 +329,7 @@ export function Plan({ tripId }: { tripId: string }) {
     if (undoTimer.current) clearTimeout(undoTimer.current);
     void run(async () => {
       await client.from("plan_items").upsert(row(it), { onConflict: "id" });
-      if (it.spotId) await unmarkRemoved(it.spotId);
+      await unmarkItemRemoved(it);
     });
   };
 
@@ -344,7 +351,7 @@ export function Plan({ tripId }: { tripId: string }) {
       setItems(items.map((i) => (i.id === old.id ? next : i)));
       void run(async () => {
         await client.from("plan_items").upsert(row(next), { onConflict: "id" });
-        if (old.spotId) await markRemoved(old.spotId);
+        await markItemRemoved(old);
         await unmarkRemoved(spotId);
       });
     } else {
@@ -426,7 +433,7 @@ export function Plan({ tripId }: { tripId: string }) {
                   key={item.id}
                   item={item}
                   solo={SOLO}
-                  spotName={item.spotId ? spots.get(item.spotId)?.name ?? "" : ""}
+                  spotName={item.spotId ? spots.get(item.spotId)?.name ?? "" : "サイトにない場所"}
                   onOpen={() => setDetail(item)}
                   onMenu={() => setMenuId(item.id)}
                   onDragStart={() => (dragging.current = true)}
@@ -453,6 +460,17 @@ export function Plan({ tripId }: { tripId: string }) {
         {detail &&
           (() => {
             const s = detail.spotId ? spots.get(detail.spotId) : undefined;
+            if (!detail.spotId) {
+              // サイトにない場所：タイトル、「地図で見る」（入力した文字で検索）、「この場所の情報は、このサイトにはありません。」だけ
+              return (
+                <div className="stack" style={{ paddingBottom: 12 }}>
+                  <a className="secondary-btn" href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(detail.title)}`} target="_blank" rel="noopener noreferrer">
+                    地図で見る
+                  </a>
+                  <p className="sub">この場所の情報は、このサイトにはありません。</p>
+                </div>
+              );
+            }
             if (!s) return null;
             return (
               <div className="stack" style={{ paddingBottom: 12 }}>
