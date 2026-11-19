@@ -18,13 +18,18 @@ export function BottomSheet({
 }) {
   const closeRef = useRef<HTMLButtonElement>(null);
   const sheetRef = useRef<HTMLDivElement>(null);
+  // onClose は、親が描き直されるたびに新しい関数になる（onClose={() => …}）。それを依存に入れると、
+  // 入力欄に1文字打つたびに、下の効果が「終わって、また始まり」、閉じるボタンにフォーカスが移ってキーボードが消える。
+  // そのため、最新の onClose を ref に持ち、効果は、開いた・閉じたときだけ動かす。
+  const onCloseRef = useRef(onClose);
+  onCloseRef.current = onClose;
   useEffect(() => {
     if (!open) return;
     // 開く前にフォーカスがあったもの（「…」のボタンなど）を覚えておき、閉じたら戻す
     const opener = document.activeElement as HTMLElement | null;
     closeRef.current?.focus();
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") return onClose();
+      if (e.key === "Escape") return onCloseRef.current();
       if (e.key !== "Tab") return;
       // フォーカスをシートの中に閉じ込める（最後でTabを押すと最初へ、最初でShift+Tabを押すと最後へ）
       const items = [...(sheetRef.current?.querySelectorAll<HTMLElement>("a[href], button, input, select, textarea, summary, [tabindex]") ?? [])].filter(
@@ -48,7 +53,7 @@ export function BottomSheet({
       window.removeEventListener("keydown", onKey);
       if (opener && document.contains(opener)) opener.focus();
     };
-  }, [open, onClose]);
+  }, [open]);
   if (!open) return null;
   // body の直下に出す：カードのように「ぼかし」を持つ要素の中に置かれても、画面の下に固定されるように
   return createPortal(
