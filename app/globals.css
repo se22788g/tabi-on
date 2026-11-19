@@ -52,9 +52,9 @@
   /* 寸法 */
   --radius-card: 24px;
   --radius-row: 16px;
-  --safe-top: max(env(safe-area-inset-top, 0px), 59px);
+  --safe-top: max(env(safe-area-inset-top, 0px), 12px);
   --safe-bottom: max(env(safe-area-inset-bottom, 0px), 34px);
-  --header-body: 64px;
+  --header-body: 56px;
   --app-width: 390px;
   --tap: 44px;
   --font-size-title: 26px;

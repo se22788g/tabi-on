@@ -40,7 +40,7 @@ for (const path of [...F, ...M]) {
   const problems = [];
   if (r.small.length) problems.push("小さい:" + r.small.join(" / "));
   if (r.tabbar !== isM) problems.push(`タブバー ${r.tabbar}（期待 ${isM}）`);
-  if (!r.header || r.header.top !== 0 || r.header.h < 123) problems.push("ヘッダー " + JSON.stringify(r.header));
+  if (!r.header || r.header.top !== 0 || r.header.h < 56) problems.push("ヘッダー " + JSON.stringify(r.header));
   if (r.hscroll) problems.push("横スクロール");
   if (r.english.length) problems.push("英字小見出し " + r.english);
   if (r.menu) problems.push("ハンバーガー");

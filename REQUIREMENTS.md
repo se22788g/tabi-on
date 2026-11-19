@@ -222,7 +222,8 @@ supabase/seed/spots.json            架空の旅行先カタログ
 **セーフエリア**
 
 - `<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">` を指定する。
-- ヘッダーは `position: fixed` で画面の一番上に置き、`padding-top: max(env(safe-area-inset-top), 59px)`。ヘッダーの中身の高さは64px。本文にはその分の上余白を付ける。
+- ヘッダーは `position: fixed` で画面の一番上に置き、`padding-top: max(env(safe-area-inset-top), 12px)`。ヘッダーの中身の高さは56px（押せるものは44px のまま）。本文にはその分の上余白を付ける。
+  - **変えた理由**：これまでは `59px`（ダイナミックアイランドの高さ）を下限にしていたため、iPhone の Safari のブラウザ表示（`env(safe-area-inset-top)` が 0）でも、ヘッダーが 123px（59＋64）になり、上に余白が空きすぎて、本文が下がってスクロールが増えた。ステータスバーの高さは `env(safe-area-inset-top)` が教えてくれるので、下限は小さな余白（12px）にした。`env` が 47〜59px を返す表示（ホーム画面に追加して、ステータスバーの下まで本文を広げる設定など）では、これまでどおりその分だけ空くので、ダイナミックアイランドとは重ならない。
 - 下に固定するもの（メインボタン、タブバー）は `padding-bottom: max(env(safe-area-inset-bottom), 34px)`。背景は不透明にして、後ろの中身が透けないようにする。
 - パソコンで開いたときは、幅390pxのアプリを画面の中央に置き、周りは背景色。
 
