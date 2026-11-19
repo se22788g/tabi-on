@@ -7,7 +7,7 @@ import { Header, Logo } from "@/components/layout/Header";
 import { BottomSheet } from "@/components/ui/BottomSheet";
 import { BottomBar, PrimaryButton } from "@/components/ui/buttons";
 import { Chip } from "@/components/ui/choices";
-import { PREFECTURES } from "@/lib/mock/data";
+import { PREFECTURES } from "@/lib/domain/regions";
 import { getBrowserSupabase } from "@/lib/db/browser";
 import { ensureAnonymousSession } from "@/lib/db/anonymous";
 import { fetchSpot } from "@/lib/db/queries";

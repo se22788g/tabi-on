@@ -9,7 +9,7 @@ import { SetupNotice } from "@/components/ui/Loading";
 import { fetchTrip } from "@/lib/db/queries";
 import { useSupabase } from "@/lib/db/use-supabase";
 import { visibleQuestions } from "@/lib/domain/questions";
-import { RATING_NAMES } from "@/lib/mock/data";
+import { RATING_NAMES } from "@/lib/domain/ratings";
 import { generateCandidatesAction, generatePlanAction } from "@/lib/server/trip-actions";
 
 /** おすすめを作っている間の、波の動きを最低これだけ見せる（短すぎると、何が起きたか分からないため） */

@@ -1,5 +1,9 @@
 // 行きたい度合い（0〜4）の集計と、工程案に使うおすすめの判定（仕様書 A2「AIを呼ぶ前のルール」）。AIは使わない。
 
+/** 行きたい度合い（0〜4）の名前。画面に出す言葉 */
+export const RATING_NAMES = ["行きたくない", "あまり", "どちらでもない", "行きたい", "すごく行きたい"] as const;
+export type RatingLevel = 0 | 1 | 2 | 3 | 4;
+
 export type CandidateStat = { candidateId: string; sum: number; min: number; count: number };
 export type CandidateLite = { id: string; spotIds: string[] };
 

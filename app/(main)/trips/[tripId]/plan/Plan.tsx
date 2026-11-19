@@ -17,7 +17,7 @@ import { useSupabase } from "@/lib/db/use-supabase";
 import { daysFor } from "@/lib/domain/plan-rules";
 import type { Companion, Nights } from "@/lib/domain/questions";
 import type { Spot } from "@/lib/domain/spot";
-import { RATING_NAMES } from "@/lib/mock/data";
+import { RATING_NAMES } from "@/lib/domain/ratings";
 import { sendToFriend } from "@/lib/share";
 
 const POLL_MS = 6000;

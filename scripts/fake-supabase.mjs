@@ -11,7 +11,7 @@ const CORS = { "access-control-allow-origin": "*", "access-control-allow-headers
 
 export function createFakeDb() {
   const spots = JSON.parse(readFileSync("supabase/seed/spots.json", "utf8"));
-  return { spots, trips: [], members: [], answers: [], candidates: [], ratings: [], plan_items: [], plans: null, removed_spots: [], visits: [], log: [], seq: 0 };
+  return { spots, trips: [], members: [], answers: [], candidates: [], ratings: [], plan_items: [], plans: null, removed_spots: [], visits: [], profiles: [], log: [], seq: 0 };
 }
 
 const iso = () => new Date().toISOString();
@@ -90,7 +90,7 @@ export async function installFakeSupabase(context, db, { userId = randomUUID(), 
     const prefer = req.headers()["prefer"] ?? "";
     const reply = (rows) => (wantsObject ? (rows[0] ? json(route, rows[0]) : json(route, { message: "no rows" }, 406)) : json(route, rows));
     if (path.startsWith("rpc/")) return json(route, rpc(path.slice(4), body ?? {}));
-    const tables = { spots: db.spots, trips: db.trips, members: db.members, answers: db.answers, candidates: db.candidates, ratings: db.ratings, plan_items: db.plan_items, removed_spots: db.removed_spots, visits: db.visits };
+    const tables = { spots: db.spots, trips: db.trips, members: db.members, answers: db.answers, candidates: db.candidates, ratings: db.ratings, plan_items: db.plan_items, removed_spots: db.removed_spots, visits: db.visits, profiles: db.profiles };
     if (!(path in tables)) return json(route, [], 200);
     const rows = tables[path];
     if (method === "GET" || method === "HEAD") {
@@ -104,10 +104,10 @@ export async function installFakeSupabase(context, db, { userId = randomUUID(), 
       const list = Array.isArray(body) ? body : [body];
       db.log.push(`POST ${path} ${list.length}`);
       for (const r of list) {
-        const key = { answers: ["member_id", "question_id"], ratings: ["member_id", "candidate_id"], plan_items: ["id"], removed_spots: ["trip_id", "spot_id"], visits: ["user_id", "spot_id"] }[path];
+        const key = { answers: ["member_id", "question_id"], ratings: ["member_id", "candidate_id"], profiles: ["id"], plan_items: ["id"], removed_spots: ["trip_id", "spot_id"], visits: ["user_id", "spot_id"] }[path];
         const i = key ? rows.findIndex((x) => key.every((k) => x[k] === r[k])) : -1;
         if (i >= 0) { if (!prefer.includes("ignore-duplicates")) rows[i] = { ...rows[i], ...r }; }
-        else rows.push({ ...(path === "members" ? { id: randomUUID(), seq: ++db.seq, user_id: null, is_owner: false, answered_at: null, rated_at: null } : {}), ...r });
+        else rows.push({ created_at: iso(), ...(path === "members" ? { id: randomUUID(), seq: ++db.seq, user_id: null, is_owner: false, answered_at: null, rated_at: null } : {}), ...r });
       }
       return prefer.includes("return=representation") ? json(route, list, 201) : empty(route, 201);
     }

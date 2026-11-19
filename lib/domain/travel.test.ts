@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { nearestOrigin, AREA_KEYS, ORIGIN_CITIES, areaKeyOf, candidatePriceYen, formatPrice, travelFor, travelTimeLabel } from "./travel";
-import { PREFECTURES } from "@/lib/mock/data";
+import { PREFECTURES } from "@/lib/domain/regions";
 
 describe("出発地の割り当て", () => {
   it("すべての都道府県がどれかの都市に割り当てられる", () => {

@@ -15,7 +15,7 @@ import { fetchAllSpots, fetchTrip } from "@/lib/db/queries";
 import { useSupabase } from "@/lib/db/use-supabase";
 import type { Spot } from "@/lib/domain/spot";
 import { candidatePriceYen, nearestOrigin, travelTimeLabel, type OriginCity } from "@/lib/domain/travel";
-import { RATING_NAMES, type RatingLevel } from "@/lib/mock/data";
+import { RATING_NAMES, type RatingLevel } from "@/lib/domain/ratings";
 import { generatePlanAction } from "@/lib/server/trip-actions";
 
 /** F6 に出すおすすめの最大枚数 */

@@ -1,6 +1,6 @@
 import { Check } from "lucide-react";
 import type { ReactNode } from "react";
-import { RATING_NAMES, type RatingLevel } from "@/lib/mock/data";
+import { RATING_NAMES, type RatingLevel } from "@/lib/domain/ratings";
 
 /** 1つだけ選ぶ問い、または複数選ぶ時期など。「未定」は点線の縁 */
 export function Chip({

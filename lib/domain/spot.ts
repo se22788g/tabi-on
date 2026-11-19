@@ -24,6 +24,8 @@ export type Spot = {
   photo: string | null;
   /** 写真の撮影者名。不明なら空 */
   credit: string;
+  /** 写真すべて（M4 で横にスワイプして1〜3枚を見せる） */
+  images: { url: string; credit: string }[];
 };
 
 export function spotFromRow(row: Partial<SpotRow> & { id: string; name: string }): Spot {
@@ -49,6 +51,7 @@ export function spotFromRow(row: Partial<SpotRow> & { id: string; name: string }
     lng: row.lng ?? null,
     photo: img?.url || null,
     credit: img?.credit ?? "",
+    images: (row.images ?? []).filter((i) => i.url).slice(0, 3).map((i) => ({ url: i.url, credit: i.credit ?? "" })),
   };
 }
 
