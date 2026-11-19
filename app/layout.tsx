@@ -13,12 +13,15 @@ const zen = Zen_Maru_Gothic({
 export const metadata: Metadata = {
   title: "たびおん",
   description: "みんなの「行きたい」と「したい」から、旅が決まる。",
+  // ホーム画面に追加したときの見え方（iPhone の Safari）
+  appleWebApp: { capable: true, title: "たびおん", statusBarStyle: "default" },
 };
 
 export const viewport: Viewport = {
   width: "device-width",
   initialScale: 1,
   viewportFit: "cover",
+  themeColor: "#F6F4FD",
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {

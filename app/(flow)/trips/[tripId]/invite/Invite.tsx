@@ -3,14 +3,18 @@
 import { Check, Copy, Plus, Send } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
+import { AccountSheet } from "@/components/auth/AccountSheet";
 import { Header } from "@/components/layout/Header";
 import { BottomSheet } from "@/components/ui/BottomSheet";
 import { BottomBar, PrimaryButton, SecondaryButton } from "@/components/ui/buttons";
 import { Loading, SetupNotice } from "@/components/ui/Loading";
+import { accountEmail } from "@/lib/auth/account";
 import { fetchTrip, type MemberInfo, type TripInfo } from "@/lib/db/queries";
+import { useTripRealtime } from "@/lib/db/use-trip-realtime";
 import { useSupabase } from "@/lib/db/use-supabase";
 
-const POLL_MS = 4000;
+/** Realtime が届かないときの、念のための読み直し */
+const SAFETY_POLL_MS = 30000;
 const MAX_MEMBERS = 12;
 
 type Status = "まだ" | "回答中" | "回答済み";
@@ -24,6 +28,9 @@ export function Invite({ tripId }: { tripId: string }) {
   const [adding, setAdding] = useState(false);
   const [name, setName] = useState("");
   const [nameError, setNameError] = useState("");
+  const [accountOpen, setAccountOpen] = useState(false);
+  /** すでにアカウント（メール）があるか。あれば「記録を残す」のカードは出さない */
+  const [hasAccount, setHasAccount] = useState<boolean | null>(null);
   const client = sb.status === "ready" ? sb.client : null;
   const userId = sb.status === "ready" ? sb.userId : null;
 
@@ -35,11 +42,18 @@ export function Invite({ tripId }: { tripId: string }) {
   }, [client, tripId, router]);
 
   useEffect(() => {
+    if (!client) return;
+    client.auth.getUser().then(({ data: u }) => setHasAccount(accountEmail(u.user) !== null));
+  }, [client]);
+
+  useEffect(() => {
     void load();
-    // TODO(spec): 参加状況の更新は、いまは4秒ごとに読み直している。Supabase Realtime での更新は段階6。
-    const t = window.setInterval(() => void load(), POLL_MS);
+    const t = window.setInterval(() => void load(), SAFETY_POLL_MS);
     return () => window.clearInterval(t);
   }, [load]);
+
+  // 参加状況（members）が変わったら、すぐに読み直す（別の端末で参加した人が、「まだ」から「回答中」に変わる）
+  useTripRealtime(client, tripId, ["members"], () => void load());
 
   if (sb.status === "unconfigured" || sb.status === "failed") return <SetupNotice status={sb.status} />;
   if (!data) return <Loading />;
@@ -125,18 +139,21 @@ export function Invite({ tripId }: { tripId: string }) {
           })}
         </section>
 
-        <section className="card" style={{ marginTop: 16, padding: 16, display: "flex", alignItems: "center", gap: 12 }}>
-          <div style={{ flex: 1 }}>
-            <h3 style={{ fontSize: 14 }}>記録を残す（任意）</h3>
-            <p className="sub" style={{ marginTop: 2 }}>アカウントを作ると、ほかの端末でも旅と行きたい場所が見られます。</p>
-          </div>
-          {/* TODO(spec): アカウント作成（linkIdentity / updateUser）は段階6。 */}
-          <button type="button" className="small-btn">作る</button>
-        </section>
+        {hasAccount === false && (
+          <section className="card" style={{ marginTop: 16, padding: 16, display: "flex", alignItems: "center", gap: 12 }}>
+            <div style={{ flex: 1 }}>
+              <h3 style={{ fontSize: 14 }}>記録を残す（任意）</h3>
+              <p className="sub" style={{ marginTop: 2 }}>アカウントを作ると、ほかの端末でも旅と行きたい場所が見られます。</p>
+            </div>
+            <button type="button" className="small-btn" onClick={() => setAccountOpen(true)}>作る</button>
+          </section>
+        )}
       </main>
       <BottomBar>
         <PrimaryButton href={`/trips/${tripId}/q/1`}>自分の回答をはじめる</PrimaryButton>
       </BottomBar>
+
+      {client && <AccountSheet open={accountOpen} onClose={() => setAccountOpen(false)} client={client} />}
 
       <BottomSheet open={adding} onClose={() => setAdding(false)} title="人を追加">
         <div className="stack" style={{ paddingBottom: 12 }}>

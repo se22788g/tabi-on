@@ -1,7 +1,7 @@
 // 段階3の画面を、偽の Supabase（scripts/fake-supabase.mjs）で通しで動かして、画面の実行時エラーと表示を確かめる。
 // 使い方: （偽のURLを埋め込んだビルドを動かしたうえで）node scripts/smoke-stage3.mjs <保存先> [baseUrl]
 import { chromium } from "playwright-core";
-import { createFakeDb, installFakeSupabase } from "./fake-supabase.mjs";
+import { createFakeDb, installFakeSupabase, pushChange } from "./fake-supabase.mjs";
 import { randomUUID } from "node:crypto";
 
 const out = process.argv[2] ?? "docs/screens/stage3";
@@ -45,6 +45,10 @@ const code = db.trips[0].code;
 ok("F2：招待コードが出る", (await a.locator(".invite-code strong").innerText()) === code);
 ok("F2：状態（あなた＝回答中、みさき＝まだ）", (await a.locator(".member-row").allInnerTexts()).join("|").replace(/\s+/g, "") === "ああなた回答中|みみさきまだ");
 await shot(a, "F2-invite");
+ok("F2：アカウントがなければ「記録を残す（任意）」のカードと「作る」が出る", (await a.getByText("記録を残す（任意）").isVisible()) && (await a.getByRole("button", { name: "作る", exact: true }).count()) === 1);
+await a.getByRole("button", { name: "作る", exact: true }).click();
+ok("F2：「作る」で、メールで続けるシートが開く", await a.getByRole("dialog", { name: "メールで続ける" }).isVisible());
+await a.keyboard.press("Escape");
 await a.getByRole("button", { name: "人を追加" }).click();
 await a.getByPlaceholder("名前を入力").fill("けんた");
 await a.getByRole("button", { name: "追加", exact: true }).click();
@@ -61,9 +65,12 @@ await b.getByRole("button", { name: /みさき/ }).click();
 await b.getByRole("button", { name: "参加して質問に答える" }).click();
 await b.waitForURL(/\/q\/1/);
 ok("F3：参加すると user_id が入る", db.members.find((m) => m.name === "みさき").user_id === B);
-await a.goto(`${base}/trips/${tripId}/invite`, { waitUntil: "networkidle" });
-await a.waitForSelector(".member-row");
-ok("F2：参加状況が更新される（みさき＝回答中）", (await a.locator(".member-row").allInnerTexts()).join("|").replace(/\s+/g, "").includes("みさき回答中"));
+// 開いたままの F2 に、Realtime の通知が届いて、reload なしで「みさき＝回答中」に変わる
+ok("F2：Realtime の購読が張られている", (db.sockets ?? []).some((s) => s.joins.some((j) => j.bindings.some((x) => x.table === "members"))));
+ok("F2：参加する前は「まだ」のまま（通知が来るまで変わらない）", (await a.locator(".member-row").allInnerTexts()).join("|").replace(/\s+/g, "").includes("みさきまだ"));
+pushChange(db, "members", { trip_id: tripId });
+await a.waitForFunction(() => document.querySelector("main")?.innerText.replace(/\s+/g, "").includes("みさき回答中"), null, { timeout: 5000 }).catch(() => {});
+ok("F2：参加状況が、reload なしで更新される（みさき＝回答中）", (await a.locator(".member-row").allInnerTexts()).join("|").replace(/\s+/g, "").includes("みさき回答中"));
 // 参加済みの端末でもう一度開くと、続きの画面へ
 await b.goto(`${base}/j/${code}`, { waitUntil: "networkidle" });
 await b.waitForURL(/\/q\/1/);
@@ -189,12 +196,15 @@ await a.locator(".sheet .check-row").first().click();
 await a.waitForTimeout(500);
 ok("M3：候補から足すと、その日の最後に入り、並べ替えられる", db.plan_items.length === before + 1 && db.plan_items.some((p) => p.source === "user" && p.day === 1 && p.edited_by_user));
 await shot(a, "M3-plan-edited");
-// ほかの端末の更新が6秒以内に反映される（お知らせ）。自分の直した分の「変わりました」の通知が先に終わるのを待つ
+// ほかの端末の更新が、Realtime の通知で、すぐ（数秒以内）反映される。自分の直した分の「変わりました」の通知が先に終わるのを待つ
 await a.waitForTimeout(1600);
+ok("M3：Realtime の購読が張られている（plans・plan_items・members）", ["plans", "plan_items", "members"].every((t) => (db.sockets ?? []).some((s) => s.joins.some((j) => j.bindings.some((x) => x.table === t)))));
 db.plans = { ...db.plans, version: db.plans.version + 5, updated_reason: "2人目の回答で更新しました" };
 db.plan_items.push({ id: randomUUID(), trip_id: tripId, day: 2, position: 9, spot_id: all[6], title: "ほかの人が足した予定", time_hint: "18:30", pinned: false, edited_by_user: false, source: "rule" });
-await a.waitForTimeout(7500);
-ok("M3：ほかの人の更新が反映され、「2人目の回答で更新しました」が出る", (await a.locator(".notice").innerText()).includes("2人目の回答で更新しました") && (await a.locator(".plan-item").count()) === 7);
+const t0n = Date.now();
+pushChange(db, "plans", { trip_id: tripId });
+await a.waitForFunction(() => document.querySelector(".notice")?.textContent?.includes("2人目の回答で更新しました"), null, { timeout: 5000 }).catch(() => {});
+ok("M3：ほかの人の更新が、通知から3秒以内に反映され、「2人目の回答で更新しました」が出る（読み直しを待たない）", Date.now() - t0n < 3000 && (await a.locator(".notice").innerText()).includes("2人目の回答で更新しました") && (await a.locator(".plan-item").count()) === 7);
 await a.getByRole("button", { name: "この案で決める" }).click();
 await a.waitForURL(/\/trips$/);
 ok("M3：決めると status=decided", db.trips[0].status === "decided");

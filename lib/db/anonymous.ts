@@ -2,7 +2,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 
 /**
  * 全員を最初に匿名ログインさせる。すでにログインしていれば何もしない。
- * 「アカウントを作る」は、この匿名ユーザーに Google かメールを紐づける操作（段階6）。
+ * 「アカウントを作る」は、この匿名ユーザーにメールを紐づける操作（components/auth/AccountSheet.tsx）。Google ログインは作らない。
  * 戻り値：ログイン中のユーザー id。失敗したら null（アプリは仮データのまま動かす）。
  */
 export async function ensureAnonymousSession(supabase: SupabaseClient): Promise<string | null> {

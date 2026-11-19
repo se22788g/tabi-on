@@ -13,6 +13,7 @@ import { LevelDot } from "@/components/ui/choices";
 import { Loading, SetupNotice } from "@/components/ui/Loading";
 import { Photo } from "@/components/ui/Photo";
 import { fetchAllSpots } from "@/lib/db/queries";
+import { useTripRealtime } from "@/lib/db/use-trip-realtime";
 import { useSupabase } from "@/lib/db/use-supabase";
 import { daysFor } from "@/lib/domain/plan-rules";
 import type { Companion, Nights } from "@/lib/domain/questions";
@@ -20,7 +21,8 @@ import type { Spot } from "@/lib/domain/spot";
 import { RATING_NAMES } from "@/lib/domain/ratings";
 import { sendToFriend } from "@/lib/share";
 
-const POLL_MS = 6000;
+/** Realtime が届かないときの、念のための読み直し */
+const SAFETY_POLL_MS = 30000;
 const TOUCH_DELAY_MS = 1000;
 const UNDO_MS = 5000;
 
@@ -193,18 +195,22 @@ export function Plan({ tripId }: { tripId: string }) {
     };
   }, [client, fetchView, applyView, router]);
 
-  // TODO(spec): ほかの人の更新は、いまは6秒ごとに読み直して反映している。Supabase Realtime での更新は段階6。
+  /** ほかの人の更新を読み直して反映する。自分が直している最中（保存中・ドラッグ中）は、上書きしない */
+  const refresh = useCallback(async () => {
+    if (!client || inFlight.current > 0 || dragging.current || touchTimer.current) return;
+    const v = await fetchView();
+    if (!v || inFlight.current > 0 || dragging.current) return;
+    if ((v.plan?.version ?? 0) !== versionRef.current) applyView(v);
+    else setView(v);
+  }, [client, fetchView, applyView]);
+
+  // 工程案・予定・参加状況の変更を、Supabase Realtime で受け取る（2人目が度合いを終えると、開いている画面に「2人目の回答で更新しました」が出る）
+  useTripRealtime(client, tripId, ["plans", "plan_items", "members"], () => void refresh());
   useEffect(() => {
     if (!client) return;
-    const t = window.setInterval(async () => {
-      if (inFlight.current > 0 || dragging.current || touchTimer.current) return;
-      const v = await fetchView();
-      if (!v || inFlight.current > 0 || dragging.current) return;
-      if ((v.plan?.version ?? 0) !== versionRef.current) applyView(v);
-      else setView(v);
-    }, POLL_MS);
+    const t = window.setInterval(() => void refresh(), SAFETY_POLL_MS);
     return () => window.clearInterval(t);
-  }, [client, fetchView, applyView]);
+  }, [client, refresh]);
 
   useEffect(
     () => () => {

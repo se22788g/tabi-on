@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 import { AiBadge } from "@/components/ui/badges";
 import { Header } from "@/components/layout/Header";
+import { AccountSheet } from "@/components/auth/AccountSheet";
 import { SecondaryButton } from "@/components/ui/buttons";
 import { Photo } from "@/components/ui/Photo";
 import { Loading, SetupNotice } from "@/components/ui/Loading";
@@ -48,6 +49,13 @@ export function Me() {
   const [sent, setSent] = useState<string | null>(null);
   const [showHint, setShowHint] = useState(false);
   const [showAll, setShowAll] = useState(false);
+  const [accountOpen, setAccountOpen] = useState(false);
+  /** メールのリンクを開いて戻ってきたときの結果（/auth/callback が付ける） */
+  const [accountResult, setAccountResult] = useState<"confirmed" | "failed" | null>(null);
+  useEffect(() => {
+    const r = new URLSearchParams(window.location.search).get("account");
+    if (r === "confirmed" || r === "failed") setAccountResult(r);
+  }, []);
   const ref = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -103,12 +111,35 @@ export function Me() {
           <span className="avatar" style={{ width: 36, height: 36, fontSize: 14 }}>{(ready.displayName ?? "わたし").slice(0, 1)}</span>
           <b>{ready.displayName ?? "わたし"}</b>
         </div>
-        {/* TODO(spec): アカウントの有無で切り替える（あればメールアドレスと「ログアウト」）。Googleとメールでの登録は段階6。 */}
-        <p className="sub min">アカウントを作ると、ほかの端末でも記録が見られます</p>
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
-          <SecondaryButton>Googleで続ける</SecondaryButton>
-          <SecondaryButton>メールで続ける</SecondaryButton>
-        </div>
+        {accountResult && (
+          // TODO(spec): メールのリンクを開いたあとの文言は、文言一覧にない（仮の文言）。
+          <p className="sub" role="status" style={{ color: accountResult === "failed" ? "#b3261e" : undefined, fontWeight: 900 }}>
+            {accountResult === "confirmed" ? "アカウントができました。ほかの端末でも、同じメールで記録が見られます。" : "確認できませんでした。もう一度ためしてください"}
+          </p>
+        )}
+        {ready.email ? (
+          <>
+            <p className="sub min">{ready.email}</p>
+            <SecondaryButton
+              onClick={async () => {
+                // ログアウトすると、この端末は、また匿名の別の人として始まる（アカウントの記録は、メールでログインすればまた見られる）
+                if (my.status === "ready") await my.client.auth.signOut();
+                window.location.assign("/me");
+              }}
+            >
+              ログアウト
+            </SecondaryButton>
+          </>
+        ) : (
+          <>
+            <p className="sub min">アカウントを作ると、ほかの端末でも記録が見られます</p>
+            {/* Google ログインは、今回は作らない。公開後に足せるよう、ボタンの並び（横2つのグリッド）は崩さない */}
+            <div style={{ display: "grid", gridTemplateColumns: "1fr", gap: 8 }}>
+              <SecondaryButton onClick={() => setAccountOpen(true)}>メールで続ける</SecondaryButton>
+            </div>
+            {my.status === "ready" && <AccountSheet open={accountOpen} onClose={() => setAccountOpen(false)} client={my.client} />}
+          </>
+        )}
       </section>
 
       <section style={{ paddingTop: 22 }}>

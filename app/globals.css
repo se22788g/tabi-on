@@ -1436,3 +1436,9 @@ h3 {
   color: #fff;
   text-decoration: underline;
 }
+
+/* 検索欄のように、入力欄の中の input が枠を持つとき：外側の枠にフォーカスの輪を出す */
+.text-input:focus-within {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}

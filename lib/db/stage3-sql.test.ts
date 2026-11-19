@@ -40,6 +40,7 @@ beforeAll(async () => {
   db = new PGlite();
   await db.exec(`
     create role anon nologin; create role authenticated nologin; create role service_role nologin bypassrls;
+    create publication supabase_realtime;
     create schema auth;
     create table auth.users (id uuid primary key);
     create function auth.uid() returns uuid language sql stable as $$
@@ -362,3 +363,19 @@ describe("サイトにない場所（spot_id が null の予定）", () => {
   });
 });
 const D = "00000000-0000-0000-0000-00000000000d";
+
+describe("Realtime（段階6）", () => {
+  it("plans・plan_items・members だけが publication に入り、ratings・answers・candidates は入らない", async () => {
+    const rows = await as("service_role", null, "select tablename from pg_publication_tables where pubname = 'supabase_realtime' order by tablename");
+    expect(rows.map((r) => r.tablename)).toEqual(["members", "plan_items", "plans"]);
+  });
+  it("削除の通知にも trip_id が入る（replica identity full）", async () => {
+    const rows = await as("service_role", null, "select relname, relreplident from pg_class where relname in ('plans','plan_items','members') order by relname");
+    expect(rows.map((r) => r.relreplident)).toEqual(["f", "f", "f"]);
+  });
+  it("もう一度流しても壊れない（すでに入っていれば何もしない）", async () => {
+    const sql = readFileSync("supabase/migrations/20260104000000_realtime.sql", "utf8");
+    await db.exec(sql);
+    expect(await as("service_role", null, "select tablename from pg_publication_tables where pubname = 'supabase_realtime'")).toHaveLength(3);
+  });
+});

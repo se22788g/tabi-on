@@ -2,6 +2,7 @@
 
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { useCallback, useEffect, useState } from "react";
+import { accountEmail } from "@/lib/auth/account";
 import type { AnswerRowLite } from "@/lib/domain/tendency";
 import type { Spot } from "@/lib/domain/spot";
 import type { WishCandidate, WishRating } from "@/lib/domain/wishlist";
@@ -21,16 +22,19 @@ export type MyData = {
   displayName: string | null;
   /** 最後に使った出発地（都道府県名） */
   origin: string | null;
+  /** アカウント（メール）があるときのメールアドレス。匿名なら null */
+  email: string | null;
 };
 
 export async function loadMyData(client: SupabaseClient, userId: string): Promise<MyData> {
-  const [spots, a, r, c, v, p] = await Promise.all([
+  const [spots, a, r, c, v, p, u] = await Promise.all([
     fetchAllSpots(client),
     client.from("answers").select("question_id, value"),
     client.from("ratings").select("candidate_id, level, created_at"),
     client.from("candidates").select("id, spot_ids"),
     client.from("visits").select("spot_id, again, created_at"),
     client.from("profiles").select("display_name, origin").maybeSingle(),
+    client.auth.getUser(),
   ]);
   return {
     userId,
@@ -41,6 +45,7 @@ export async function loadMyData(client: SupabaseClient, userId: string): Promis
     visits: (v.data ?? []).map((x) => ({ spotId: x.spot_id as string, again: x.again as boolean | null, createdAt: x.created_at as string })),
     displayName: p.data?.display_name ?? null,
     origin: p.data?.origin ?? null,
+    email: accountEmail(u.data.user),
   };
 }
 

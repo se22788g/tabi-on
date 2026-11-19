@@ -133,6 +133,53 @@ ok("M4：もう一度押すと取り消せる", db.visits.length === 0);
 // タブの強調（M4 は来た側）
 await page.goto(`${base}/me`, { waitUntil: "networkidle" });
 await page.locator('a[href^="/spots/"]').first().click().catch(() => {});
+// ---- 段階6：アカウント登録（メールのみ）----
+await page.goto(`${base}/me`, { waitUntil: "networkidle" });
+await page.waitForSelector(".wish-card");
+ok("M5：Google ログインのボタンはない。「メールで続ける」だけ", (await page.getByRole("button", { name: "Googleで続ける" }).count()) === 0 && (await page.getByRole("button", { name: "メールで続ける" }).count()) === 1);
+await shot("M5-account");
+await page.getByRole("button", { name: "メールで続ける" }).click();
+await page.getByLabel("メールアドレス").fill("あいうえお");
+await page.getByRole("button", { name: "送る", exact: true }).click();
+ok("アカウント：形が違うメールは、送らずに文を出す", (await page.getByText("メールアドレスを確かめてください").isVisible()) && !db.log.some((l) => l.startsWith("updateUser")));
+await page.getByLabel("メールアドレス").fill("ayako@example.com");
+await page.getByRole("button", { name: "送る", exact: true }).click();
+await page.waitForSelector("text=確認メールを送りました。");
+ok("アカウント：新しいメールは、いまの記録に紐づける確認メール（updateUser）を送る", db.log.includes("updateUser ayako@example.com") && !db.log.some((l) => l.startsWith("otp")));
+await shot("M5-account-sent");
+await page.keyboard.press("Escape");
+// すでにあるメール：ログイン用のリンク（signInWithOtp、新しいアカウントは作らない）
+db.takenEmails = ["taken@example.com"];
+await page.getByRole("button", { name: "メールで続ける" }).click();
+await page.getByLabel("メールアドレス").fill("taken@example.com");
+await page.getByRole("button", { name: "送る", exact: true }).click();
+await page.waitForSelector("text=ログイン用のリンクを送りました。");
+ok("アカウント：すでにあるメールには、ログイン用のリンクを送る（shouldCreateUser=false）", db.log.includes("otp taken@example.com") && db.otpBody.create_user === false);
+await page.keyboard.press("Escape");
+// 失敗
+db.failUpdateUser = true;
+await page.getByRole("button", { name: "メールで続ける" }).click();
+await page.getByLabel("メールアドレス").fill("fail@example.com");
+await page.getByRole("button", { name: "送る", exact: true }).click();
+await page.waitForSelector("text=送れませんでした。もう一度ためしてください");
+ok("アカウント：失敗したら文を出す", true);
+db.failUpdateUser = false;
+await page.keyboard.press("Escape");
+// アカウントがあるとき：メールアドレスとログアウト
+db.account = { email: "ayako@example.com" };
+await page.goto(`${base}/me?account=confirmed`, { waitUntil: "networkidle" });
+await page.waitForSelector(".wish-card");
+ok("M5：アカウントがあれば、メールアドレスと「ログアウト」。作るボタンは出ない", (await page.getByText("ayako@example.com").isVisible()) && (await page.getByRole("button", { name: "ログアウト" }).isVisible()) && (await page.getByRole("button", { name: "メールで続ける" }).count()) === 0);
+ok("M5：メールのリンクから戻ったときの文", await page.getByText("アカウントができました。").isVisible());
+await shot("M5-account-done");
+await page.goto(`${base}/me?account=failed`, { waitUntil: "networkidle" });
+ok("M5：リンクが使えなかったときの文", await page.getByText("確認できませんでした。もう一度ためしてください").isVisible());
+await page.getByRole("button", { name: "ログアウト" }).click();
+await page.waitForURL(/\/me$/);
+await page.waitForSelector(".wish-card");
+ok("M5：ログアウトすると、メールで続ける状態に戻る", (await page.getByRole("button", { name: "メールで続ける" }).count()) === 1);
+db.account = null;
+
 ok("画面の実行時エラーがない", errors.length === 0, errors.slice(0, 3).join(" / "));
 await browser.close();
 console.log(fail ? `${fail} 件 NG` : "すべて OK");

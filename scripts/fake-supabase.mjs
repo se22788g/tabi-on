@@ -132,9 +132,56 @@ export async function installFakeSupabase(context, db, { userId = randomUUID(), 
     if (req.method() === "OPTIONS") return empty(route);
     const p = new URL(req.url()).pathname;
     if (p.startsWith("/auth/v1/signup") || p.startsWith("/auth/v1/token")) return json(route, session());
-    if (p.startsWith("/auth/v1/user")) return json(route, user);
+    if (p.startsWith("/auth/v1/user")) {
+      if (req.method() === "PUT") {
+        // メールの紐づけ（updateUser）：すでに登録されたメールは 422 email_exists。そうでなければ、確認メールを送ったことにする
+        const email = JSON.parse(req.postData() ?? "{}").email;
+        db.log.push(`updateUser ${email}`);
+        if ((db.takenEmails ?? []).includes(email)) return json(route, { code: 422, error_code: "email_exists", msg: "A user with this email address has already been registered" }, 422);
+        if (db.failUpdateUser) return json(route, { code: 500, msg: "boom" }, 500);
+        db.pendingEmail = email;
+        return json(route, { ...user, new_email: email });
+      }
+      return json(route, { ...user, is_anonymous: !db.account, email: db.account?.email ?? undefined });
+    }
+    if (p.startsWith("/auth/v1/otp")) {
+      db.log.push(`otp ${JSON.parse(req.postData() ?? "{}").email}`);
+      db.otpBody = JSON.parse(req.postData() ?? "{}");
+      return json(route, {});
+    }
+    if (p.startsWith("/auth/v1/logout")) { db.account = null; return empty(route); }
     if (p.startsWith("/rest/v1/")) return rest(route, req);
     return json(route, {});
   });
+  // Supabase Realtime（WebSocket）：Phoenix のプロトコルのうち、join・heartbeat・leave に答える。変更の通知は pushChange で送る
+  await context.routeWebSocket(/\/realtime\/v1\/websocket/, (ws) => {
+    const sock = { ws, joins: [] };
+    (db.sockets ??= []).push(sock);
+    ws.onMessage((raw) => {
+      const m = JSON.parse(String(raw));
+      const arr = Array.isArray(m);
+      const [joinRef, ref, topic, event, payload] = arr ? m : [m.join_ref, m.ref, m.topic, m.event, m.payload];
+      const send = (ev, pl) => ws.send(JSON.stringify(arr ? [joinRef, ref, topic, ev, pl] : { join_ref: joinRef, ref, topic, event: ev, payload: pl }));
+      if (event === "phx_join") {
+        const bindings = (payload?.config?.postgres_changes ?? []).map((b, i) => ({ ...b, id: i + 1 }));
+        sock.joins.push({ topic, joinRef, bindings });
+        send("phx_reply", { status: "ok", response: { postgres_changes: bindings } });
+      } else send("phx_reply", { status: "ok", response: {} });
+    });
+  });
   return { userId };
+}
+
+/** 開いている画面に、テーブルの変更の通知を送る（Realtime の postgres_changes と同じ形）。購読した絞り込み（trip_id）は、偽なので見ない */
+export function pushChange(db, table, record = {}, type = "UPDATE") {
+  let sent = 0;
+  for (const { ws, joins } of db.sockets ?? []) {
+    for (const j of joins) {
+      const ids = j.bindings.filter((b) => b.table === table).map((b) => b.id);
+      if (!ids.length) continue;
+      ws.send(JSON.stringify([j.joinRef, null, j.topic, "postgres_changes", { ids, data: { schema: "public", table, commit_timestamp: new Date().toISOString(), type, columns: [], record, old_record: {}, errors: null } }]));
+      sent++;
+    }
+  }
+  return sent;
 }
