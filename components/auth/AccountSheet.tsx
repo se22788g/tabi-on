@@ -63,9 +63,14 @@ export function AccountSheet({ open, onClose, client }: { open: boolean; onClose
           <p className="sub">メールアドレスに、リンクを送ります。リンクを開くと、ほかの端末でも記録が見られます。</p>
           <input
             className="text-input"
-            type="email"
+            // type="email" ではなく、type="text" ＋ inputMode="email"：キーボードは同じ（メール用）で、iPhone の Safari が、
+            // メール欄に対して行う独自の処理（自動入力の候補の更新など）を、受けない。入力の確認は、送るときに自分で行う（isValidEmail）。
+            type="text"
             inputMode="email"
             autoComplete="email"
+            autoCapitalize="none"
+            autoCorrect="off"
+            spellCheck={false}
             value={email}
             maxLength={254}
             onChange={(e) => setEmail(e.target.value)}

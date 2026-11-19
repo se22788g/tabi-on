@@ -5,7 +5,7 @@ import { readFileSync } from "node:fs";
 import { randomUUID } from "node:crypto";
 
 const b64 = (o) => Buffer.from(JSON.stringify(o)).toString("base64url");
-export const jwt = (sub) => `${b64({ alg: "HS256", typ: "JWT" })}.${b64({ sub, role: "authenticated", aud: "authenticated", is_anonymous: true, iat: Math.floor(Date.now() / 1000), exp: Math.floor(Date.now() / 1000) + 3600 })}.sig`;
+export const jwt = (sub, seconds = 3600) => `${b64({ alg: "HS256", typ: "JWT" })}.${b64({ sub, role: "authenticated", aud: "authenticated", is_anonymous: true, iat: Math.floor(Date.now() / 1000), exp: Math.floor(Date.now() / 1000) + seconds })}.sig`;
 
 const CORS = { "access-control-allow-origin": "*", "access-control-allow-headers": "*", "access-control-allow-methods": "*", "access-control-expose-headers": "*" };
 
@@ -29,7 +29,7 @@ function filter(rows, params) {
 
 export async function installFakeSupabase(context, db, { userId = randomUUID(), base = "http://127.0.0.1:54321" } = {}) {
   const user = { id: userId, aud: "authenticated", role: "authenticated", is_anonymous: true, app_metadata: {}, user_metadata: {}, created_at: iso() };
-  const session = () => ({ access_token: jwt(userId), refresh_token: "r", expires_in: 3600, expires_at: Math.floor(Date.now() / 1000) + 3600, token_type: "bearer", user });
+  const session = () => ({ access_token: jwt(userId, db.sessionSeconds ?? 3600), refresh_token: "r", expires_in: db.sessionSeconds ?? 3600, expires_at: Math.floor(Date.now() / 1000) + (db.sessionSeconds ?? 3600), token_type: "bearer", user });
   const json = (route, body, status = 200) => route.fulfill({ status, headers: { ...CORS, "content-type": "application/json" }, body: JSON.stringify(body) });
   const empty = (route, status = 204) => route.fulfill({ status, headers: CORS, body: "" });
 
@@ -131,6 +131,8 @@ export async function installFakeSupabase(context, db, { userId = randomUUID(), 
     const req = route.request();
     if (req.method() === "OPTIONS") return empty(route);
     const p = new URL(req.url()).pathname;
+    if (p.startsWith("/auth/v1/signup")) db.log.push("signup");
+    if (p.startsWith("/auth/v1/token")) db.log.push("token");
     if (p.startsWith("/auth/v1/signup") || p.startsWith("/auth/v1/token")) return json(route, session());
     if (p.startsWith("/auth/v1/user")) {
       if (req.method() === "PUT") {
