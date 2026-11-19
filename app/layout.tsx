@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from "next";
 import { Zen_Maru_Gothic } from "next/font/google";
 import "./globals.css";
+import { EnsureSession } from "@/components/auth/EnsureSession";
 
 const zen = Zen_Maru_Gothic({
   weight: ["500", "700", "900"],
@@ -24,6 +25,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
   return (
     <html lang="ja" className={zen.variable}>
       <body>
+        <EnsureSession />
         <div className="app-shell">{children}</div>
       </body>
     </html>
