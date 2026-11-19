@@ -1,0 +1,10 @@
+{
+  "description": "友人グループの好みや行きたい度を集め、AIが旅行先とプランのたたき台を提案。みんなの気持ちを共有しながら、納得の旅を決められます。",
+  "robots": {
+    "index": false
+  },
+  "accessibility": {
+    "addBypassLinks": false,
+    "ignoreReducedMotion": false
+  }
+}
