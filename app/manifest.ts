@@ -2,8 +2,8 @@ import type { MetadataRoute } from "next";
 
 /**
  * PWA の manifest。ホーム画面に追加すると、アプリのように開く（アドレスバーなし）。
- * TODO(spec): オフライン対応（service worker）は仕様書にないので作っていない。アイコンは 96px の元画像から拡大したもので、
- * 高解像度の元画像ができたら、public/icons/ を差し替える。
+ * TODO(spec): オフライン対応（service worker）は仕様書にないので作っていない。
+ * アイコンは、docs/brand/app-icon.png（元画像）から scripts/make-icons.mjs で作る。
  */
 export default function manifest(): MetadataRoute.Manifest {
   return {
