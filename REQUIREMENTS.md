@@ -433,7 +433,7 @@ supabase/seed/spots.json            架空の旅行先カタログ
 
 旧「わたしの行きたい」を、このマイページにまとめた。上から次の順に並べる。
 
-0. **アカウント**（一番上、小さめ）：名前。アカウントがなければ「アカウントを作ると、ほかの端末でも記録が見られます」＋「Googleで続ける」「メールで続ける」。あればメールアドレスと「ログアウト」。
+0. **アカウント**（一番上、小さめ）：名前。アカウントがなければ「アカウントを作ると、ほかの端末でも記録が見られます」＋「メールで続ける」だけ（Google ログインは、今回は作らない。TODO(spec): 公開後に足せるよう、ボタンの並びは崩さない）。あればメールアドレスと「ログアウト」。
 1. **次は、誰とどこへ行こう。**（AI）
    - 説明：「ひとりで考えはじめても大丈夫。工程案ができたら、誰かを誘えます。」
    - 横にスワイプするカード3枚（CSS の scroll-snap。次のカードが右に24px見える）。下に何枚目かを示す点。「横にスワイプして見る」は初回だけ出す。
@@ -503,7 +503,7 @@ supabase/seed/spots.json            架空の旅行先カタログ
 
 ## データモデル（Supabase）と権限
 
-全員を最初に Supabase の匿名ログイン（`signInAnonymously`）でログインさせる。「アカウントを作る」は、その匿名ユーザーに Google またはメールを紐づける操作（`linkIdentity` または `updateUser({ email })`）にする。こうすると、アカウントを作る前の回答もそのまま引き継がれる。
+全員を最初に Supabase の匿名ログイン（`signInAnonymously`）でログインさせる。「アカウントを作る」は、その匿名ユーザーにメールを紐づける操作（`updateUser({ email })`。確認メールのリンクで完了）にする。Google ログイン（`linkIdentity`）は今回は作らない。ほかの端末では、同じメールにログイン用のリンクを送って（`signInWithOtp`）、同じ記録を見る。こうすると、アカウントを作る前の回答もそのまま引き継がれる。
 
 **Supabase のプロジェクト設定**：Data API は有効、「Enable RLS on new tables automatically」は有効、「Grant API access to new tables automatically」は無効にする。無効なので、マイグレーションには、テーブルごとの `enable row level security` と、必要な操作だけの `grant`（`anon`・`authenticated` への select／insert／update／delete。`service_role` は全部）を明示的に書くこと。書き忘れると「permission denied」になる。
 
@@ -959,7 +959,7 @@ Supabase と Vercel はどちらも無料プランで始められる。自分で
 **自分でやること**
 
 1. GitHub にリポジトリを作る。
-2. Supabase でプロジェクトを作り、Authentication の設定で Anonymous sign-ins をオンにする。Google でのログインも使うなら、Google Cloud で OAuth のクライアントを作って Supabase に登録する（メールだけなら不要）。
+2. Supabase でプロジェクトを作り、Authentication の設定で Anonymous sign-ins をオンにする。今回は Google ログインを使わないので、Google Cloud の設定は不要。Authentication の Email は有効のままにする（確認メールの送信が使える状態）。
 3. Anthropic Console で APIキーを作る。使いすぎを防ぐため、月の上限額を設定しておく。
 4. （任意）Unsplash の開発者登録をして Access Key を作る。
 5. Vercel に GitHub のリポジトリをつなぐ。
