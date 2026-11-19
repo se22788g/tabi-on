@@ -1,4 +1,4 @@
-# Supabase の準備（段階2）
+# Supabase の準備（段階2・3）
 
 キーは、自分で `.env.local` に入れる。チャットや GitHub には貼らない。
 
@@ -39,3 +39,20 @@ node --env-file=.env.local scripts/check-db.mjs
 ## 補足
 - 元データは `supabase/seed/spots.json`。直したら `pnpm db:sql` で `spots.sql` と `setup.sql` を作り直す。
 - 写真：Figma Make の写真が6件に入っている。ほかは、写真がないときの代わりの画像（色の背景にエリア名）になる。`UNSPLASH_ACCESS_KEY` を入れて `node --env-file=.env.local scripts/fetch-images.ts` を流すと、写真が入る。
+
+## 段階3：新しい SQL を足す（段階2の SQL をすでに流している人）
+段階3で、旅づくり・参加・工程案のための関数と、外した場所の記録のテーブル（`removed_spots`）を足しました。
+1. ダッシュボード → **SQL Editor** → **New query**
+2. [`supabase/apply-stage3.sql`](apply-stage3.sql) を **全部コピーして貼り付け**、**Run**（初回だけ。「Success. No rows returned」と出れば完了）
+   - 初めて Supabase を使う人は、これではなく `setup.sql`（段階2・3の両方が入っている）を貼る
+3. 確かめる：
+   ```
+   node --env-file=.env.local scripts/check-flow.mjs
+   ```
+   匿名ログインの2人で、旅づくり→参加→回答→度合い→工程案→並べ替えまでを、実際の Supabase で通します。キーは表示しません。
+   テスト用の旅は、最後に消します（匿名ユーザーは残ります）。`SUPABASE_SERVICE_ROLE_KEY` が必要です。
+4. アプリを動かす：`pnpm dev`（`.env.local` の3つの値が入っていること。入れ直したら開発サーバーを入れ直す）
+
+## 画面の動作確認（キーなし）
+`scripts/fake-supabase.mjs` は、画面の確認用の偽の Supabase です（あなたのプロジェクトには通信しません）。
+`scripts/smoke-stage3.mjs` が、偽のデータで F1〜F6・M2・M3 を通しで動かします（`docs/screens/stage3/` の画像はこれで撮ったもの）。

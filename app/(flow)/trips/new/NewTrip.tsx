@@ -1,12 +1,18 @@
 "use client";
 
 import { Plus, X } from "lucide-react";
-import { useState } from "react";
+import { useRouter } from "next/navigation";
+import { useEffect, useState } from "react";
 import { Header, Logo } from "@/components/layout/Header";
 import { BottomSheet } from "@/components/ui/BottomSheet";
 import { BottomBar, PrimaryButton } from "@/components/ui/buttons";
 import { Chip } from "@/components/ui/choices";
-import { MOCK_TRIP_ID, PREFECTURES } from "@/lib/mock/data";
+import { PREFECTURES } from "@/lib/mock/data";
+import { getBrowserSupabase } from "@/lib/db/browser";
+import { ensureAnonymousSession } from "@/lib/db/anonymous";
+import { fetchSpot } from "@/lib/db/queries";
+import { prefectureShort } from "@/lib/domain/spot";
+import { ORIGIN_PREFECTURE, REGION_LABELS, regionsToDb } from "@/lib/domain/regions";
 import { nearestOrigin } from "@/lib/domain/travel";
 import type { Companion, Nights } from "@/lib/domain/questions";
 
@@ -36,8 +42,13 @@ function nextSixMonths(): number[] {
   return Array.from({ length: 6 }, (_, i) => ((m + i) % 12) + 1);
 }
 
-export function NewTrip({ seed }: { seed: { id: string; label: string } | null }) {
-  const [seedOn, setSeedOn] = useState(Boolean(seed));
+export function NewTrip({ seedId }: { seedId: string | null }) {
+  // 「ここへの旅をつくる」で来たとき：場所は公開データなので、ログイン前でも読める
+  const [seed, setSeed] = useState<{ id: string; label: string; regionLabel: string } | null>(null);
+  const router = useRouter();
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState("");
+  const [seedOn, setSeedOn] = useState(true);
   const [companion, setCompanion] = useState<Companion>("undecided");
   const [ownerName, setOwnerName] = useState("");
   const [name, setName] = useState("");
@@ -48,9 +59,25 @@ export function NewTrip({ seed }: { seed: { id: string; label: string } | null }
   const [origin, setOrigin] = useState("未定");
   const [prefecture, setPrefecture] = useState<string | null>(null);
   const [sheet, setSheet] = useState(false);
-  const [regions, setRegions] = useState<string[]>(seed ? [] : []);
+  // 「この場所から考えます」のときは、地域をその場所に合わせておく
+  const [regions, setRegions] = useState<string[]>([]);
   const [nameError, setNameError] = useState("");
   const monthOptions = nextSixMonths();
+
+  useEffect(() => {
+    const client = getBrowserSupabase();
+    if (!seedId || !client) return;
+    let alive = true;
+    fetchSpot(client, seedId).then((s) => {
+      if (!alive || !s) return;
+      const regionLabel = REGION_LABELS[s.region] ?? "";
+      setSeed({ id: s.id, label: `${prefectureShort(s.prefecture)}・${s.area}`, regionLabel });
+      if (regionLabel) setRegions((r) => (r.length === 0 ? [regionLabel] : r));
+    });
+    return () => {
+      alive = false;
+    };
+  }, [seedId]);
   const solo = companion === "solo";
 
   const addName = () => {
@@ -84,7 +111,35 @@ export function NewTrip({ seed }: { seed: { id: string; label: string } | null }
     setRegions(rest.includes(r) ? rest.filter((x) => x !== r) : [...rest, r]);
   };
 
-  const next = solo ? `/trips/${MOCK_TRIP_ID}/q/1` : `/trips/${MOCK_TRIP_ID}/invite`;
+  /** 旅・言い出し役・一緒に行く人を、まとめて作る（SQL の create_trip）。ひとりなら質問へ、それ以外は招待へ */
+  const submit = async () => {
+    if (saving) return;
+    setSaving(true);
+    setError("");
+    try {
+      const supabase = getBrowserSupabase();
+      if (!supabase || !(await ensureAnonymousSession(supabase))) throw new Error("no session");
+      const originPref = origin === "未定" ? null : origin === "その他" ? prefecture : ORIGIN_PREFECTURE[origin];
+      const { data, error: rpcError } = await supabase.rpc("create_trip", {
+        p_owner_name: solo ? "" : ownerName.trim(),
+        p_companion: companion,
+        p_months: monthsUndecided ? [] : months,
+        p_nights: nights,
+        p_origin: originPref ?? null,
+        p_regions: regionsToDb(regions),
+        p_seed_spot_id: seed && seedOn ? seed.id : null,
+        p_names: solo ? [] : names,
+      });
+      if (rpcError) throw rpcError;
+      const tripId = (data as { trip_id: string }).trip_id;
+      router.push(solo ? `/trips/${tripId}/q/1` : `/trips/${tripId}/invite`);
+    } catch (e) {
+      console.error("create_trip", e);
+      // TODO(spec): 旅を作れなかったときの文言は文言一覧にない（仮の文言）。
+      setError("旅を作れませんでした。もう一度ためしてください");
+      setSaving(false);
+    }
+  };
 
   return (
     <>
@@ -235,7 +290,6 @@ export function NewTrip({ seed }: { seed: { id: string; label: string } | null }
                 </Chip>
               ))}
             </div>
-            {/* TODO(spec): 「この場所から考えます」のとき、地域をその場所に合わせる処理は段階3（旅を作るとき）で入れる。 */}
           </section>
         </div>
       </main>
@@ -258,7 +312,14 @@ export function NewTrip({ seed }: { seed: { id: string; label: string } | null }
       </BottomSheet>
 
       <BottomBar>
-        <PrimaryButton href={next}>{solo ? "次へ：質問に答える" : "次へ：招待コードを発行する"}</PrimaryButton>
+        {error && (
+          <p className="sub" role="alert" style={{ marginBottom: 8, textAlign: "center", color: "#b3261e" }}>
+            {error}
+          </p>
+        )}
+        <PrimaryButton disabled={saving} onClick={submit}>
+          {solo ? "次へ：質問に答える" : "次へ：招待コードを発行する"}
+        </PrimaryButton>
       </BottomBar>
     </>
   );
