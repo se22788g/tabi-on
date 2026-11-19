@@ -2,7 +2,6 @@ import type { Metadata, Viewport } from "next";
 import { Zen_Maru_Gothic } from "next/font/google";
 import "./globals.css";
 import { EnsureSession } from "@/components/auth/EnsureSession";
-import { FocusProbe } from "@/components/debug/FocusProbe";
 
 const zen = Zen_Maru_Gothic({
   weight: ["500", "700", "900"],
@@ -50,8 +49,6 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
     <html lang="ja" className={zen.variable}>
       <body>
         <EnsureSession />
-        {/* 診断用（?debug=focus を付けて開いたときだけ動く。調査が終わったら消す） */}
-        <FocusProbe />
         <div className="app-shell">{children}</div>
       </body>
     </html>
