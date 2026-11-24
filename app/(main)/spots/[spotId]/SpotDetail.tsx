@@ -8,7 +8,8 @@ import { PartnerBadge } from "@/components/ui/badges";
 import { PrimaryButton } from "@/components/ui/buttons";
 import { LevelDot } from "@/components/ui/choices";
 import { Loading, SetupNotice } from "@/components/ui/Loading";
-import { Photo } from "@/components/ui/Photo";
+import { PhotoCredit } from "@/components/ui/PhotoCredit";
+import { SpotImage } from "@/components/ui/SpotImage";
 import { useMyData } from "@/lib/db/my-data";
 import { prefectureShort } from "@/lib/domain/spot";
 import { myLevelFor } from "@/lib/domain/wishlist";
@@ -92,13 +93,15 @@ export function SpotDetail({ spotId }: { spotId: string }) {
         }
       />
       <main className="screen has-tabbar content">
-        {/* 写真は横にスワイプして1〜3枚。撮影者名があれば、写真の下に小さく出す */}
+        {/* 写真は横にスワイプして1〜3枚。撮影者名があれば、写真の下に「Photo: {撮影者} / Unsplash」を小さく出す（Unsplash の規約：撮影者と Unsplash へのリンク） */}
         <div className={`spot-hero ${spot.images.length > 1 ? "spot-swipe" : ""}`} style={{ marginTop: 16 }}>
-          {(spot.images.length ? spot.images : [{ url: "", credit: "" }]).map((img, i) => (
-            <Photo key={i} src={img.url || null} alt={spot.name} label={spot.name} className="" />
+          {(spot.images.length ? spot.images : [{ url: "", credit: "", creditUrl: "" }]).map((img, i) => (
+            <SpotImage key={i} src={img.url || null} name={spot.name} area={spot.area} category={spot.category} aspect="16/10" displayWidth={390} eager={i === 0} />
           ))}
         </div>
-        {spot.credit && <p className="sub min" style={{ marginTop: 6 }}>Photo: {spot.credit} / Unsplash</p>}
+        {spot.images.filter((i) => i.credit).map((i, n) => (
+          <PhotoCredit key={n} credit={i.credit} creditUrl={i.creditUrl} />
+        ))}
         <div style={{ marginTop: 16, display: "grid", gap: 8 }}>
           <span className="sub">{prefectureShort(spot.prefecture)}・{spot.area}</span>
           <h1 style={{ fontSize: 24 }}>{spot.name}</h1>

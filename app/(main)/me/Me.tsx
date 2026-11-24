@@ -7,7 +7,7 @@ import { AiBadge } from "@/components/ui/badges";
 import { Header } from "@/components/layout/Header";
 import { AccountSheet } from "@/components/auth/AccountSheet";
 import { SecondaryButton } from "@/components/ui/buttons";
-import { Photo } from "@/components/ui/Photo";
+import { SpotImage } from "@/components/ui/SpotImage";
 import { Loading, SetupNotice } from "@/components/ui/Loading";
 import { createHome } from "@/lib/ai/home";
 import type { HomeItem } from "@/lib/ai/fallback/home";
@@ -152,7 +152,7 @@ export function Me() {
             return (
               <article key={c.spot_id} className="wish-card">
                 <div className="wish-photo">
-                  <Photo src={s.photo} alt={s.name} label={s.area} className="" />
+                  <SpotImage src={s.photo} name={s.name} area={s.area} category={s.category} aspect="fill" displayWidth={340} />
                   <span className="label">{c.label}</span>
                 </div>
                 <div className="wish-body">
@@ -195,7 +195,7 @@ export function Me() {
         ) : (
           rows.map((s) => (
             <Link key={s.id} href={`/spots/${s.id}`} className="card wish-row">
-              <Photo src={s.photo} alt={s.name} label={s.area} className="" />
+              <SpotImage src={s.photo} name={s.name} area={s.area} category={s.category} aspect="fill" displayWidth={96} />
               <span className="wish-row-body">
                 <span className="sub min">{prefectureShort(s.prefecture)}・{s.area}</span>
                 <b>{s.name}</b>

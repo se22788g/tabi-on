@@ -38,7 +38,10 @@ node --env-file=.env.local scripts/check-db.mjs
 
 ## 補足
 - 元データは `supabase/seed/spots.json`。直したら `pnpm db:sql` で `spots.sql` と `setup.sql` を作り直す。
-- 写真：Figma Make の写真が6件に入っている。ほかは、写真がないときの代わりの画像（色の背景にエリア名）になる。`UNSPLASH_ACCESS_KEY` を入れて `node --env-file=.env.local scripts/fetch-images.ts` を流すと、写真が入る。
+- 写真：Figma Make の写真が6件、残りは Unsplash（`UNSPLASH_ACCESS_KEY`）から取る。`node --env-file=.env.local scripts/fetch-images.ts` で、写真のない場所だけを探して、`spots.json` と Supabase の `spots.images` に入れる。
+  - Unsplash は、デモのうちは **1時間に50回まで**。足りなくなったら止まるので、**1時間あけて、もう一度流す**（続きから再開）。
+  - 写真を使ったあと、Unsplash に「ダウンロードの通知」を、写真ごとに1回だけ送る（規約）。これも、回数が足りないときは、次の回に回す。
+  - 新しい SQL は要らない（`images` の列は、もともとある）。
 
 ## 段階3：新しい SQL を足す（段階2の SQL をすでに流している人）
 段階3で、旅づくり・参加・工程案のための関数と、外した場所の記録のテーブル（`removed_spots`）を足しました。

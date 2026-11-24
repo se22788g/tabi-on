@@ -4,7 +4,7 @@ import { Heart } from "lucide-react";
 import Link from "next/link";
 import { Header } from "@/components/layout/Header";
 import { Loading, SetupNotice } from "@/components/ui/Loading";
-import { Photo } from "@/components/ui/Photo";
+import { SpotImage } from "@/components/ui/SpotImage";
 import { useMyData } from "@/lib/db/my-data";
 import { prefectureShort } from "@/lib/domain/spot";
 
@@ -32,7 +32,7 @@ export function Visited() {
             if (!s) return null;
             return (
               <Link key={v.spotId} href={`/spots/${s.id}`} className="card visit-row">
-                <Photo src={s.photo} alt={s.name} label={s.area} className="" />
+                <SpotImage src={s.photo} name={s.name} area={s.area} category={s.category} aspect="fill" displayWidth={80} />
                 <span className="wish-row-body" style={{ flex: 1 }}>
                   <span className="sub min">{prefectureShort(s.prefecture)}・{s.area}</span>
                   <b>{s.name}</b>

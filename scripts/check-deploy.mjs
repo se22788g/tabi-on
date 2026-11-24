@@ -68,6 +68,10 @@ if (!skipSupabase && supaUrl && anon) {
   const spots = await fetch(`${supaUrl}/rest/v1/spots?select=id&limit=1`, { headers: h });
   const count = Number((spots.headers.get("content-range") ?? "").split("/")[1]);
   ok("ログイン前でも spots が読める・56件", spots.ok && count === 56, `status ${spots.status}, ${count}件`);
+  const all = await fetch(`${supaUrl}/rest/v1/spots?select=id,images`, { headers: h });
+  const rows = all.ok ? await all.json() : [];
+  const noImage = rows.filter((r) => !Array.isArray(r.images) || r.images.length === 0).map((r) => r.id);
+  ok("spots 56件すべてに、写真が1枚以上ある", rows.length === 56 && noImage.length === 0, `写真がない ${noImage.length}件：${noImage.join(", ")}`);
   const trips = await fetch(`${supaUrl}/rest/v1/trips?select=id&limit=1`, { headers: h });
   ok("ログイン前は trips が読めない（権限なし）", !trips.ok);
   const ratings = await fetch(`${supaUrl}/rest/v1/ratings?select=*&limit=1`, { headers: h });

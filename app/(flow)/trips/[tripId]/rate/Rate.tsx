@@ -9,7 +9,8 @@ import { AiBadge, PartnerBadge } from "@/components/ui/badges";
 import { BottomSheet } from "@/components/ui/BottomSheet";
 import { BottomBar, PrimaryButton, TextLink } from "@/components/ui/buttons";
 import { RatingDots } from "@/components/ui/choices";
-import { Photo } from "@/components/ui/Photo";
+import { PhotoCredit } from "@/components/ui/PhotoCredit";
+import { SpotImage } from "@/components/ui/SpotImage";
 import { Loading, SetupNotice } from "@/components/ui/Loading";
 import { fetchAllSpots, fetchTrip } from "@/lib/db/queries";
 import { useSupabase } from "@/lib/db/use-supabase";
@@ -210,7 +211,11 @@ export function Rate({ tripId }: { tripId: string }) {
           >
             <div className={`heat-band ${selected !== null ? `bg-rate rate-${selected}` : ""}`} />
             <button type="button" className="photo-btn" onClick={() => setSheet(true)} aria-label={`${card.title}に含まれる場所を見る`}>
-              <Photo src={spots.get(card.spotIds[0])?.photo ?? null} alt={card.areaLabel} label={card.areaLabel} className="" />
+              {/* おすすめの写真は、含まれる場所の先頭の場所の写真 */}
+              {(() => {
+                const first = spots.get(card.spotIds[0]);
+                return <SpotImage src={first?.photo ?? null} name={first?.name ?? card.areaLabel} area={first?.area ?? card.areaLabel} category={first?.category} aspect="fill" displayWidth={350} eager />;
+              })()}
             </button>
             <div className="candidate-body">
               <div className="row-between">
@@ -259,7 +264,10 @@ export function Rate({ tripId }: { tripId: string }) {
             if (!s) return null;
             return (
               <div key={id} className="card" style={{ overflow: "hidden" }}>
-                <Photo src={s.photo} alt={s.name} label={s.name} className="" />
+                <SpotImage src={s.photo} name={s.name} area={s.area} category={s.category} aspect="16/9" displayWidth={350} />
+                <div style={{ padding: "0 14px" }}>
+                  <PhotoCredit credit={s.credit} creditUrl={s.creditUrl} className="sub min" />
+                </div>
                 <div style={{ padding: 14, display: "grid", gap: 6 }}>
                   <span className="sub">{s.prefecture}・{s.area}</span>
                   <h3>{s.name}</h3>

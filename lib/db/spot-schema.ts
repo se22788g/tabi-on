@@ -7,7 +7,15 @@ export const SPOT_TAGS = [
   "温泉", "雪景色", "絶景", "歴史", "郷土料理", "海鮮", "カフェ", "街歩き", "体験", "ひとり旅", "友人", "家族", "朝旅", "夜景", "島", "アート",
 ] as const;
 
-export const spotImageSchema = z.object({ url: z.string().url(), credit: z.string(), credit_url: z.string() });
+/** id・download_location・tracked は、Unsplash の写真だけ（ダウンロードの通知を、1回だけ送るための印） */
+export const spotImageSchema = z.object({
+  url: z.string().url(),
+  credit: z.string(),
+  credit_url: z.string(),
+  id: z.string().optional(),
+  download_location: z.string().url().optional(),
+  tracked: z.boolean().optional(),
+});
 
 /** supabase/seed/spots.json の1件（= spots テーブルの1行） */
 export const spotSchema = z.object({

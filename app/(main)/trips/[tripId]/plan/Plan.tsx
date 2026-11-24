@@ -11,7 +11,8 @@ import { BottomSheet } from "@/components/ui/BottomSheet";
 import { PrimaryButton, SecondaryButton, TextLink } from "@/components/ui/buttons";
 import { LevelDot } from "@/components/ui/choices";
 import { Loading, SetupNotice } from "@/components/ui/Loading";
-import { Photo } from "@/components/ui/Photo";
+import { PhotoCredit } from "@/components/ui/PhotoCredit";
+import { SpotImage } from "@/components/ui/SpotImage";
 import { fetchAllSpots } from "@/lib/db/queries";
 import { useTripRealtime } from "@/lib/db/use-trip-realtime";
 import { useSupabase } from "@/lib/db/use-supabase";
@@ -76,7 +77,7 @@ type Removed = { item: PlanItem };
 function PlanCard({
   item,
   solo,
-  spotName,
+  spot,
   onOpen,
   onMenu,
   onDragStart,
@@ -84,7 +85,8 @@ function PlanCard({
 }: {
   item: PlanItem;
   solo: boolean;
-  spotName: string;
+  /** その場所（サイトにない場所は null） */
+  spot: Spot | null;
   onOpen: () => void;
   onMenu: () => void;
   onDragStart: () => void;
@@ -106,9 +108,19 @@ function PlanCard({
         <GripVertical size={20} strokeWidth={2} aria-hidden="true" />
       </button>
       <button type="button" className="main" onClick={onOpen}>
-        <span className="heat" aria-hidden="true">
-          {item.spotId !== null && item.avg !== null && <LevelDot level={item.avg} size={9} />}
-        </span>
+        {/* 左に正方形の小さな写真（64px）。サイトにない場所は、写真があるように見せない代わりの画像（ピンのアイコン） */}
+        {item.spotId === null ? (
+          <SpotImage variant="free" name={item.title} aspect="fill" className="plan-thumb" />
+        ) : (
+          <SpotImage src={spot?.photo ?? null} name={spot?.name ?? item.title} area={spot?.area} category={spot?.category} aspect="fill" displayWidth={64} className="plan-thumb" />
+        )}
+        {/* みんなの平均の色の小さな丸は、写真の左上に重ねる */}
+        {item.spotId !== null && item.avg !== null && (
+          <span className="heat" aria-hidden="true">
+            <LevelDot level={item.avg} size={12} />
+          </span>
+        )}
+        <span className="plan-text">
         {item.pinned && (
           <span className="pin-label">
             <Pin size={13} strokeWidth={2} aria-hidden="true" />
@@ -116,7 +128,7 @@ function PlanCard({
           </span>
         )}
         <b>{item.title}</b>
-        <span className="sub min">{item.timeHint ? `${hhmm(item.timeHint)}ごろ・` : ""}{spotName}</span>
+        <span className="sub min">{item.timeHint ? `${hhmm(item.timeHint)}ごろ・` : ""}{spot ? spot.name : "サイトにない場所"}</span>
         {!solo && item.spotId !== null && item.levels.length > 0 && (
           <span className="responses" aria-label="みんなの行きたい度合い">
             <span>みんな</span>
@@ -125,6 +137,7 @@ function PlanCard({
             ))}
           </span>
         )}
+        </span>
       </button>
       <button type="button" className="icon-btn more" style={{ background: "transparent", border: 0 }} aria-label="予定のメニュー" onClick={onMenu}>
         <MoreHorizontal size={20} strokeWidth={2} />
@@ -439,7 +452,7 @@ export function Plan({ tripId }: { tripId: string }) {
                   key={item.id}
                   item={item}
                   solo={SOLO}
-                  spotName={item.spotId ? spots.get(item.spotId)?.name ?? "" : "サイトにない場所"}
+                  spot={item.spotId ? spots.get(item.spotId) ?? null : null}
                   onOpen={() => setDetail(item)}
                   onMenu={() => setMenuId(item.id)}
                   onDragStart={() => (dragging.current = true)}
@@ -480,7 +493,8 @@ export function Plan({ tripId }: { tripId: string }) {
             if (!s) return null;
             return (
               <div className="stack" style={{ paddingBottom: 12 }}>
-                <Photo src={s.photo} alt={s.name} label={s.name} className="" />
+                <SpotImage src={s.photo} name={s.name} area={s.area} category={s.category} aspect="16/10" displayWidth={350} />
+                <PhotoCredit credit={s.credit} creditUrl={s.creditUrl} />
                 <div>
                   <span className="sub">{s.prefecture}・{s.area}</span>
                   <p style={{ marginTop: 4 }}>{s.description}</p>

@@ -90,3 +90,30 @@ describe("spots の seed（架空の旅行先カタログ）", () => {
     }
   });
 });
+
+describe("写真（spots.images）", () => {
+  const withImages = spots.filter((s) => s.images.length > 0);
+  it("Unsplash の写真には、撮影者名・撮影者のページ・ダウンロード通知の宛先が入っている（Unsplash の規約）", () => {
+    for (const s of withImages) {
+      for (const i of s.images.filter((x) => x.id)) {
+        expect(i.credit, s.id).not.toBe("");
+        expect(i.credit_url, s.id).toMatch(/^https:\/\/unsplash\.com\/@/);
+        expect(i.download_location, s.id).toMatch(/^https:\/\/api\.unsplash\.com\/photos\/.+\/download/);
+        expect(i.url, s.id).toMatch(/^https:\/\/images\.unsplash\.com\//);
+        expect(i.url, `${s.id} は、API が返した URL（ixid つき）のまま`).toContain("ixid=");
+      }
+    }
+  });
+  it("同じ写真を、別の場所に使い回さない", () => {
+    const ids = withImages.flatMap((s) => s.images.map((i) => i.id).filter(Boolean));
+    expect(new Set(ids).size).toBe(ids.length);
+  });
+  it.skipIf(withImages.length < spots.length)("56件すべてに、写真が1枚以上入っている", () => {
+    expect(withImages).toHaveLength(56);
+  });
+  it("（情報）写真のない場所の数", () => {
+    const missing = spots.filter((s) => s.images.length === 0).map((s) => s.id);
+    if (missing.length) console.warn(`写真がまだない場所 ${missing.length}件：${missing.join(", ")}（scripts/fetch-images.ts を、1時間あけて、もう一度流す）`);
+    expect(missing.length).toBeLessThanOrEqual(56);
+  });
+});
